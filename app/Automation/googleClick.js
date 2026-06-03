@@ -55,6 +55,7 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
   try {
     const page = await context.newPage();
     page.setDefaultTimeout(taskTimeoutMs);
+    page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
     await page.goto(`https://${targetHost}`, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }).catch(() => {});

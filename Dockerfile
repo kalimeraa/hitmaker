@@ -4,6 +4,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV CLOAKBROWSER_CACHE_DIR=/home/pwuser/.cloakbrowser
+ENV CLOAKBROWSER_AUTO_UPDATE=false
 
 USER root
 COPY package.json package-lock.json* ./

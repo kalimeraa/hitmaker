@@ -1,12 +1,11 @@
 services:
   app:
     build: .
-    platform: linux/amd64
     command: npm start
     tmpfs:
       - /tmp:size=512m
     ports:
-      - "3000:3000"
+      - "3100:3000"
     environment:
       PORT: 3000
       MONGODB_URI: mongodb://mongo:27017/hitmaker
@@ -18,13 +17,13 @@ services:
       CLOAKBROWSER_GEOIP: "true"
       CLOAKBROWSER_HUMANIZE: "true"
       CLOAKBROWSER_HUMAN_PRESET: default
+      CLOAKBROWSER_AUTO_UPDATE: "false"
     depends_on:
       - redis
       - mongo
 
   worker:
     build: .
-    platform: linux/amd64
     command: npm run worker
     tmpfs:
       - /tmp:size=512m
@@ -38,6 +37,7 @@ services:
       CLOAKBROWSER_GEOIP: "true"
       CLOAKBROWSER_HUMANIZE: "true"
       CLOAKBROWSER_HUMAN_PRESET: default
+      CLOAKBROWSER_AUTO_UPDATE: "false"
     depends_on:
       - redis
       - mongo

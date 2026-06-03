@@ -1,6 +1,18 @@
 const taskRepository = require("../Repositories/taskRepository");
 const { calculateProgressPercent } = require("../Domain/taskRunPlanner");
 const { runGoogleSearchClick } = require("../Automation/googleClick");
+const { taskTimeoutMs } = require("../../config/app");
+
+function withTimeout(promise, timeoutMs) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Browser run timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
 
 class TaskRunService {
   constructor(repository = taskRepository, browserAutomation = runGoogleSearchClick) {
@@ -15,13 +27,13 @@ class TaskRunService {
     });
 
     try {
-      const result = await this.browserAutomation({
+      const result = await withTimeout(this.browserAutomation({
         keyword: run.keyword,
         targetAddress: task.targetAddress,
         headless: task.headless,
         proxyUrl: task.proxyUrl,
         cookies: task.cookies
-      });
+      }), taskTimeoutMs + 5000);
 
       await this.repository.completeRun(task._id, index, {
         status: result.status,
