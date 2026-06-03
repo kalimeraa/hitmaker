@@ -1,6 +1,6 @@
-const taskRepository = require("../repositories/taskRepository");
-const { calculateProgressPercent } = require("../domain/taskRunPlanner");
-const { runGoogleSearchClick } = require("../automation/googleClick");
+const taskRepository = require("../Repositories/taskRepository");
+const { calculateProgressPercent } = require("../Domain/taskRunPlanner");
+const { runGoogleSearchClick } = require("../Automation/googleClick");
 
 class TaskRunService {
   constructor(repository = taskRepository, browserAutomation = runGoogleSearchClick) {

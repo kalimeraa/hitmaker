@@ -1,4 +1,4 @@
-const { logger } = require("../services/logService");
+const { logger } = require("../../Services/logService");
 
 function requestLogger(req, res, next) {
   const startedAt = Date.now();

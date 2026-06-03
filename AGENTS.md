@@ -20,29 +20,31 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 
 ## Katmanlar
 
-- `models/`: Mongoose schema ve model tanımları. Sadece veri şekli, doğrulama ve model seviyesindeki basit kısıtlar burada olmalıdır.
-- `repositories/`: MongoDB/Mongoose erişimi. Query, create, update ve persistence detayları burada kalır.
-- `domain/`: Saf iş kuralları ve hesaplamalar. Database, queue, HTTP veya browser dependency'si almamalıdır.
-- `validators/`: HTTP payload normalize ve validate eder. Request body'sini uygulama içi DTO'ya çevirir.
-- `services/`: Use-case ve orchestration katmanı. Controller'dan gelen işi repository, domain, queue ve automation adapter'larına dağıtır.
-- `controllers/`: HTTP request/response sınırı. Sadece service çağırır, status code döner, JSON body üretir veya view render eder.
+- `config/`: Environment değişkenlerini normalize eden config modülleri. Uygulama config'i `config/app.js` içinde kalır.
+- `bootstrap/`: Runtime bağlantılarını başlatan dosyalar. Database ve queue instance'ları burada oluşturulur.
+- `app/Models/`: Mongoose schema ve model tanımları. Sadece veri şekli, doğrulama ve model seviyesindeki basit kısıtlar burada olmalıdır.
+- `app/Repositories/`: MongoDB/Mongoose erişimi. Query, create, update ve persistence detayları burada kalır.
+- `app/Domain/`: Saf iş kuralları ve hesaplamalar. Database, queue, HTTP veya browser dependency'si almamalıdır.
+- `app/Validators/`: HTTP payload normalize ve validate eder. Request body'sini uygulama içi DTO'ya çevirir.
+- `app/Services/`: Use-case ve orchestration katmanı. Controller'dan gelen işi repository, domain, queue ve automation adapter'larına dağıtır.
+- `app/Http/Controllers/`: HTTP request/response sınırı. Sadece service çağırır, status code döner, JSON body üretir veya view render eder.
+- `app/Http/Middleware/`: Express middleware katmanı. Cross-cutting HTTP davranışları burada kalır.
 - `views/`: EJS template katmanı. HTML burada tutulur; iş kuralı, database erişimi veya queue/browser logic içermez. View'lar layout, partial, page ve component olarak bölünmelidir.
 - `routes/`: Express route tanımları. Sadece endpoint ile controller method eşleştirir.
-- `automation/`: Browser otomasyon adapter ve akışları. Database, queue veya HTTP response bilmemelidir.
-- `middleware/`: Express middleware'leri. Cross-cutting HTTP davranışları burada kalır.
-- `utils/`: Framework bağımsız küçük yardımcı fonksiyonlar.
+- `app/Automation/`: Browser otomasyon adapter ve akışları. Database, queue veya HTTP response bilmemelidir.
+- `app/Utils/`: Framework bağımsız küçük yardımcı fonksiyonlar.
 
 ## Mevcut Akış
 
-1. `routes/webRoutes.js`, `/` sayfasını `controllers/homeController.js` içine yönlendirir.
-2. `controllers/homeController.js`, `views/home/index.ejs` view'ını render eder.
-3. `routes/taskRoutes.js` task endpoint'lerini `controllers/taskController.js` içine yönlendirir.
-4. `controllers/taskController.js`, `services/taskService.js` çağırır.
-5. `services/taskService.js`, payload'ı validator ile normalize eder, task'ı repository ile kaydeder ve `services/taskJobService.js` üzerinden BullMQ kuyruğuna gönderir.
-6. `worker.js`, BullMQ job'unu `services/taskProcessorService.js` ile işler.
-7. `services/taskProcessorService.js`, run planını `domain/taskRunPlanner.js` ile üretir ve concurrency ile `services/taskRunService.js` çağırır.
-8. `services/taskRunService.js`, run durumunu repository ile günceller ve `automation/googleClick.js` üzerinden browser akışını çalıştırır.
-9. `automation/cloakBrowserClient.js`, CloakBrowser + Playwright context oluşturmanın tek sahibidir.
+1. `routes/webRoutes.js`, `/` sayfasını `app/Http/Controllers/homeController.js` içine yönlendirir.
+2. `app/Http/Controllers/homeController.js`, `views/layouts/main.ejs` layout'u ile `views/home/index.ejs` view'ını render eder.
+3. `routes/taskRoutes.js` task endpoint'lerini `app/Http/Controllers/taskController.js` içine yönlendirir.
+4. `app/Http/Controllers/taskController.js`, `app/Services/taskService.js` çağırır.
+5. `app/Services/taskService.js`, payload'ı validator ile normalize eder, task'ı repository ile kaydeder ve `app/Services/taskJobService.js` üzerinden BullMQ kuyruğuna gönderir.
+6. `worker.js`, BullMQ job'unu `app/Services/taskProcessorService.js` ile işler.
+7. `app/Services/taskProcessorService.js`, run planını `app/Domain/taskRunPlanner.js` ile üretir ve concurrency ile `app/Services/taskRunService.js` çağırır.
+8. `app/Services/taskRunService.js`, run durumunu repository ile günceller ve `app/Automation/googleClick.js` üzerinden browser akışını çalıştırır.
+9. `app/Automation/cloakBrowserClient.js`, CloakBrowser + Playwright context oluşturmanın tek sahibidir.
 
 ## SOLID Kuralları
 
@@ -58,14 +60,14 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Repository içinde business status hesabı, job progress hesabı veya browser logic yazma.
 - Domain fonksiyonları saf kalmalı; side effect içermemeli.
 - Service dosyaları küçük use-case'lere bölünmeli. Bir service büyüyorsa yeni service veya domain modülü çıkar.
-- Browser launch ayarları sadece `automation/cloakBrowserClient.js` içinde değiştirilmeli.
-- Cookie dönüşümü sadece `automation/browserCookies.js` içinde kalmalı.
-- Queue publish sadece `services/taskJobService.js` sınırında kalmalı.
-- Worker orchestration sadece `services/taskProcessorService.js` içinde kalmalı.
+- Browser launch ayarları sadece `app/Automation/cloakBrowserClient.js` içinde değiştirilmeli.
+- Cookie dönüşümü sadece `app/Automation/browserCookies.js` içinde kalmalı.
+- Queue publish sadece `app/Services/taskJobService.js` sınırında kalmalı.
+- Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.
 - Yeni route eklenirse kaynak bazlı route dosyası aç veya mevcut kaynak route'una ekle; `routes/index.js` sadece router mount etsin.
 - HTML sayfası gerekiyorsa `public/*.html` yazma; `views/` altında EJS view oluştur ve controller üzerinden render et.
 - View tek büyük dosya olmamalı. Shell için `views/layouts/`, tekrar eden parçalar için `views/partials/`, sayfa içeriği için kaynak bazlı klasörler ve küçük UI parçaları için `components/` kullan.
-- Async controller hataları `middleware/asyncHandler.js` ile yakalanmalı.
+- Async controller hataları `app/Http/Middleware/asyncHandler.js` ile yakalanmalı.
 - Yeni env değişkeni eklenirse `.env.example` ve `README.md` güncellenmeli.
 - Yeni mimari karar veya katman eklenirse bu dosya da güncellenmeli.
 
@@ -73,7 +75,7 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 
 - Proje Node.js ve CommonJS kalır; CloakBrowser ESM olduğu için dinamik import adapter içinde kullanılmalıdır.
 - `puppeteer` geri eklenmemelidir.
-- Playwright/CloakBrowser ayarları tek yerde toplanır: `automation/cloakBrowserClient.js`.
+- Playwright/CloakBrowser ayarları tek yerde toplanır: `app/Automation/cloakBrowserClient.js`.
 - CloakBrowser humanize ve geoip ayarları config üzerinden yönetilir.
 - Browser otomasyonunda mümkün olduğunca Playwright locator/selector aksiyonları kullanılmalıdır; humanize katmanını bypass eden doğrudan DOM click'lerinden kaçınılmalıdır.
 

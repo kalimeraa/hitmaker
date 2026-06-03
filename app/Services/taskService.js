@@ -1,6 +1,6 @@
-const taskRepository = require("../repositories/taskRepository");
+const taskRepository = require("../Repositories/taskRepository");
 const taskJobService = require("./taskJobService");
-const { validateCreateTaskPayload } = require("../validators/taskValidator");
+const { validateCreateTaskPayload } = require("../Validators/taskValidator");
 
 class TaskService {
   constructor(repository = taskRepository, jobService = taskJobService) {

@@ -1,7 +1,7 @@
-const { taskTimeoutMs } = require("../config");
+const { taskTimeoutMs } = require("../../config/app");
 const { applyCookies } = require("./browserCookies");
 const { launchBrowserContext } = require("./cloakBrowserClient");
-const { normalizeHost, hostnameMatches } = require("../utils/domain");
+const { normalizeHost, hostnameMatches } = require("../Utils/domain");
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

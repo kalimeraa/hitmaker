@@ -1,6 +1,6 @@
 const express = require("express");
-const logController = require("../controllers/logController");
-const { asyncHandler } = require("../middleware/asyncHandler");
+const logController = require("../app/Http/Controllers/logController");
+const { asyncHandler } = require("../app/Http/Middleware/asyncHandler");
 
 const router = express.Router();
 

@@ -1,8 +1,8 @@
-const { maxParallelBrowsers } = require("../config");
-const taskRepository = require("../repositories/taskRepository");
+const { maxParallelBrowsers } = require("../../config/app");
+const taskRepository = require("../Repositories/taskRepository");
 const taskRunService = require("./taskRunService");
-const { mapWithConcurrency } = require("../utils/concurrency");
-const { buildQueuedRuns, resolveFinalTaskStatus } = require("../domain/taskRunPlanner");
+const { mapWithConcurrency } = require("../Utils/concurrency");
+const { buildQueuedRuns, resolveFinalTaskStatus } = require("../Domain/taskRunPlanner");
 
 class TaskProcessorService {
   constructor(repository = taskRepository, runService = taskRunService) {

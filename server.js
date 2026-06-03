@@ -1,8 +1,8 @@
-const { port } = require("./config");
-const { connectDb } = require("./db");
-const { queueEvents } = require("./queue");
+const { port } = require("./config/app");
+const { connectDb } = require("./bootstrap/database");
+const { queueEvents } = require("./bootstrap/queue");
 const { createApp } = require("./app");
-const { logger } = require("./services/logService");
+const { logger } = require("./app/Services/logService");
 
 async function main() {
   await connectDb();

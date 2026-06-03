@@ -1,4 +1,4 @@
-const { queueEvents } = require("../queue");
+const { queueEvents } = require("../../../bootstrap/queue");
 
 class EventController {
   stream(req, res) {

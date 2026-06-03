@@ -1,5 +1,5 @@
-const { normalizeHost } = require("../utils/domain");
-const { HttpError } = require("../utils/httpError");
+const { normalizeHost } = require("../Utils/domain");
+const { HttpError } = require("../Utils/httpError");
 
 function parseKeywords(value) {
   return String(value || "")

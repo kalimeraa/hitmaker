@@ -1,8 +1,8 @@
 const { Worker } = require("bullmq");
-const { redis, queueName } = require("./config");
-const { connectDb } = require("./db");
-const taskProcessorService = require("./services/taskProcessorService");
-const { logger } = require("./services/logService");
+const { redis, queueName } = require("./config/app");
+const { connectDb } = require("./bootstrap/database");
+const taskProcessorService = require("./app/Services/taskProcessorService");
+const { logger } = require("./app/Services/logService");
 
 async function main() {
   await connectDb();

@@ -2,8 +2,8 @@ const path = require("path");
 const express = require("express");
 const apiRoutes = require("./routes");
 const webRoutes = require("./routes/webRoutes");
-const { errorHandler } = require("./middleware/errorHandler");
-const { requestLogger } = require("./middleware/requestLogger");
+const { errorHandler } = require("./app/Http/Middleware/errorHandler");
+const { requestLogger } = require("./app/Http/Middleware/requestLogger");
 
 function createApp() {
   const app = express();

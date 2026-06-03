@@ -1,4 +1,4 @@
-const { cloakBrowser } = require("../config");
+const { cloakBrowser } = require("../../config/app");
 
 const DEFAULT_VIEWPORT = { width: 1280, height: 900 };
 const DEFAULT_CHROMIUM_ARGS = [

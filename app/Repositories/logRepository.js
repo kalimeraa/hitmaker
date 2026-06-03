@@ -1,4 +1,4 @@
-const LogEntry = require("../models/LogEntry");
+const LogEntry = require("../Models/LogEntry");
 
 class LogRepository {
   create(payload) {

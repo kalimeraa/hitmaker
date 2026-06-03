@@ -1,4 +1,4 @@
-const { logger } = require("../services/logService");
+const { logger } = require("../../Services/logService");
 
 function errorHandler(error, req, res, next) {
   if (!error.statusCode || error.statusCode >= 500) {

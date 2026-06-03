@@ -1,4 +1,4 @@
-const { browserQueue } = require("../queue");
+const { browserQueue } = require("../../bootstrap/queue");
 
 class TaskJobService {
   constructor(queue = browserQueue) {

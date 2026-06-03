@@ -1,4 +1,4 @@
-const Task = require("../models/Task");
+const Task = require("../Models/Task");
 
 class TaskRepository {
   findRecent(limit = 50) {

@@ -15,6 +15,9 @@ services:
       QUEUE_NAME: browser-tasks
       MAX_PARALLEL_BROWSERS: 4
       TASK_TIMEOUT_MS: 120000
+      CLOAKBROWSER_GEOIP: "true"
+      CLOAKBROWSER_HUMANIZE: "true"
+      CLOAKBROWSER_HUMAN_PRESET: default
     depends_on:
       - redis
       - mongo
@@ -32,6 +35,9 @@ services:
       QUEUE_NAME: browser-tasks
       MAX_PARALLEL_BROWSERS: 4
       TASK_TIMEOUT_MS: 120000
+      CLOAKBROWSER_GEOIP: "true"
+      CLOAKBROWSER_HUMANIZE: "true"
+      CLOAKBROWSER_HUMAN_PRESET: default
     depends_on:
       - redis
       - mongo

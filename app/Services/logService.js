@@ -1,5 +1,5 @@
 const winston = require("winston");
-const logRepository = require("../repositories/logRepository");
+const logRepository = require("../Repositories/logRepository");
 
 class MongoLogTransport extends winston.Transport {
   constructor(repository = logRepository) {

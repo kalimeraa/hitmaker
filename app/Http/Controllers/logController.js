@@ -1,4 +1,4 @@
-const { listLogs } = require("../services/logService");
+const { listLogs } = require("../../Services/logService");
 
 class LogController {
   async index(req, res) {

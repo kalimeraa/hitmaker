@@ -5,22 +5,26 @@ Node.js tabanlı task runner. Express web route'ları EJS view render eder, API 
 ## Mimari
 
 - `app.js` Express uygulamasını kurar; EJS view engine, static asset servisleri, web route'ları, `/api` route'ları ve hata middleware'i burada bağlanır.
+- `config/app.js` environment değişkenlerini normalize eden uygulama config dosyasıdır.
+- `bootstrap/database.js` MongoDB bağlantısını, `bootstrap/queue.js` BullMQ queue ve queue event instance'larını başlatır.
 - `routes/` HTTP endpoint'lerini kaynak bazlı router'lara ayırır: web, task, log, error ve system route'ları.
-- `controllers/` request/response sınırıdır; iş kuralı içermez. API controller'ları JSON döner, web controller'ları view render eder.
+- `app/Http/Controllers/` request/response sınırıdır; iş kuralı içermez. API controller'ları JSON döner, web controller'ları view render eder.
+- `app/Http/Middleware/` Express middleware katmanıdır.
 - `views/` server-rendered EJS view katmanıdır. Layout, partial, page ve component olarak modüler tutulur.
-- `validators/` gelen task payload'ını normalize eder: keyword, hedef domain, proxy ve cookie formatı.
-- `domain/` saf domain kararlarını tutar; run planlama ve final status hesabı burada yapılır.
-- `services/taskService.js` task oluşturma/listeleme use-case'lerini yönetir.
-- `services/taskJobService.js` task'ı BullMQ kuyruğuna yayınlar.
-- `services/taskProcessorService.js` BullMQ job orchestration katmanıdır.
-- `services/taskRunService.js` tek bir browser run'ının durum geçişlerini ve otomasyon çağrısını yönetir.
-- `repositories/` MongoDB erişimini soyutlar.
-- `automation/cloakBrowserClient.js` CloakBrowser + Playwright context oluşturma sorumluluğunu taşır.
-- `automation/browserCookies.js` uygulama cookie modelini Playwright cookie formatına çevirir.
-- `automation/googleClick.js` sadece Google araması, sonuç bulma ve hedefe gitme akışını yönetir.
-- `services/logService.js` Winston ile console ve MongoDB `logentries` collection'ına log yazar.
+- `app/Models/` Mongoose model katmanıdır.
+- `app/Validators/` gelen task payload'ını normalize eder: keyword, hedef domain, proxy ve cookie formatı.
+- `app/Domain/` saf domain kararlarını tutar; run planlama ve final status hesabı burada yapılır.
+- `app/Services/taskService.js` task oluşturma/listeleme use-case'lerini yönetir.
+- `app/Services/taskJobService.js` task'ı BullMQ kuyruğuna yayınlar.
+- `app/Services/taskProcessorService.js` BullMQ job orchestration katmanıdır.
+- `app/Services/taskRunService.js` tek bir browser run'ının durum geçişlerini ve otomasyon çağrısını yönetir.
+- `app/Repositories/` MongoDB erişimini soyutlar.
+- `app/Automation/cloakBrowserClient.js` CloakBrowser + Playwright context oluşturma sorumluluğunu taşır.
+- `app/Automation/browserCookies.js` uygulama cookie modelini Playwright cookie formatına çevirir.
+- `app/Automation/googleClick.js` sadece Google araması, sonuç bulma ve hedefe gitme akışını yönetir.
+- `app/Services/logService.js` Winston ile console ve MongoDB `logentries` collection'ına log yazar.
 
-Bu ayrımda controller HTTP, service use-case, repository veri erişimi, domain saf karar ve automation browser detayı taşır. Browser sağlayıcısı değişirse ana değişiklik `automation/cloakBrowserClient.js` içinde kalmalıdır; queue sağlayıcısı değişirse `services/taskJobService.js` sınırında kalmalıdır.
+Bu ayrım Laravel benzeri bir MVC düzenidir: `app/Http/Controllers` HTTP sınırını, `app/Models` model katmanını, `views` view katmanını, `app/Services` use-case katmanını, `app/Repositories` veri erişimini, `app/Domain` saf kararları ve `app/Automation` browser detaylarını taşır. Browser sağlayıcısı değişirse ana değişiklik `app/Automation/cloakBrowserClient.js` içinde kalmalıdır; queue sağlayıcısı değişirse `app/Services/taskJobService.js` sınırında kalmalıdır.
 
 ## Gereksinimler
 
@@ -60,6 +64,8 @@ docker compose up --build
 ```
 
 Dockerfile, Node uygulamasını Playwright'ın browser dependency'leri hazır imajı üzerinde çalıştırır ve build sırasında `npx cloakbrowser install` ile CloakBrowser Chromium binary'sini cache'e indirir.
+
+Docker build tüm proje ağacını kopyalar; Laravel benzeri `app/`, `bootstrap/`, `config/`, `routes/`, `views/` ve `public/` klasörleri container içinde aynı path'lerle çalışır.
 
 ## Ortam Değişkenleri
 

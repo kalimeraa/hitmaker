@@ -1,6 +1,6 @@
 const express = require("express");
-const eventController = require("../controllers/eventController");
-const healthController = require("../controllers/healthController");
+const eventController = require("../app/Http/Controllers/eventController");
+const healthController = require("../app/Http/Controllers/healthController");
 
 const router = express.Router();
 
