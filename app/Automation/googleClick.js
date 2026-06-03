@@ -61,8 +61,10 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
 
     const searchUrl = buildGoogleSearchUrl(keyword);
     onEvent("browser_context_started", { keyword, targetAddress, target });
-    await runCancellable(() => page.goto(`https://${target.host}`, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }).catch(() => {}), shouldCancel);
     await applyCookies(context, cookies, target.host);
+    if ((cookies || []).length) {
+      onEvent("browser_cookies_applied", { cookieCount: cookies.length, targetHost: target.host });
+    }
     onEvent("google_search_navigation_started", { searchUrl });
     await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
     await acceptConsentIfPresent(page);
