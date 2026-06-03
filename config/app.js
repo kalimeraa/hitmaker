@@ -17,6 +17,7 @@ module.exports = {
   queueName: process.env.QUEUE_NAME || "browser-tasks",
   maxParallelBrowsers: Number(process.env.MAX_PARALLEL_BROWSERS || 4),
   taskTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || 120000),
+  googleMaxResultPages: Number(process.env.GOOGLE_MAX_RESULT_PAGES || 10),
   cloakBrowser: {
     locale: process.env.CLOAKBROWSER_LOCALE || undefined,
     timezone: process.env.CLOAKBROWSER_TIMEZONE || undefined,

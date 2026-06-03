@@ -1,6 +1,7 @@
-const { taskTimeoutMs } = require("../../config/app");
+const { googleMaxResultPages, taskTimeoutMs } = require("../../config/app");
 const { applyCookies } = require("./browserCookies");
 const { launchBrowserContext } = require("./cloakBrowserClient");
+const { findResultAcrossPages } = require("./googleSearchResults");
 const { normalizeHost, hostnameMatches } = require("../Utils/domain");
 
 function escapeRegExp(value) {
@@ -25,29 +26,6 @@ async function acceptConsentIfPresent(page) {
   }
 }
 
-async function findResultLink(page, targetHost) {
-  return page.evaluate((host) => {
-    const links = Array.from(document.querySelectorAll("a[href]"));
-    for (const link of links) {
-      const href = link.href;
-      if (!href || href.includes("/search?") || href.includes("google.")) continue;
-
-      try {
-        const parsed = new URL(href);
-        const normalizedHost = parsed.hostname.replace(/^www\./, "").toLowerCase();
-        if (normalizedHost === host || normalizedHost.endsWith(`.${host}`)) {
-          link.scrollIntoView({ block: "center", inline: "center" });
-          return href;
-        }
-      } catch (error) {
-        continue;
-      }
-    }
-
-    return null;
-  }, targetHost);
-}
-
 async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl, cookies }) {
   const targetHost = normalizeHost(targetAddress);
   const context = await launchBrowserContext({ headless, proxyUrl });
@@ -63,20 +41,15 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
     await acceptConsentIfPresent(page);
 
-    let matchedUrl = await findResultLink(page, targetHost);
-    if (!matchedUrl) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(1000);
-      matchedUrl = await findResultLink(page, targetHost);
-    }
+    const { matchedUrl, resultPage } = await findResultAcrossPages(page, targetHost, googleMaxResultPages);
 
     if (!matchedUrl || !hostnameMatches(matchedUrl, targetHost)) {
-      return { status: "not_found", matchedUrl: null };
+      return { status: "not_found", matchedUrl: null, resultPage };
     }
 
     await page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
     await page.waitForTimeout(2000);
-    return { status: "clicked", matchedUrl };
+    return { status: "clicked", matchedUrl, resultPage };
   } finally {
     await context.close();
   }

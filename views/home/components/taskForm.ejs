@@ -15,9 +15,16 @@
 
     <div class="row g-3 align-items-end">
       <div class="col-6">
-        <label for="count" class="form-label">Browser sayısı</label>
+        <label for="count" class="form-label">Click sayısı</label>
         <input class="form-control" id="count" type="number" min="1" max="50" value="10">
       </div>
+      <div class="col-6">
+        <label for="durationHours" class="form-label">Süre (saat)</label>
+        <input class="form-control" id="durationHours" type="number" min="0" max="720" step="0.01" value="0">
+      </div>
+    </div>
+
+    <div class="row g-3 align-items-end">
       <div class="col-6">
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" role="switch" id="headless" checked>

@@ -2,6 +2,7 @@ const taskRepository = require("../Repositories/taskRepository");
 const { calculateProgressPercent } = require("../Domain/taskRunPlanner");
 const { runGoogleSearchClick } = require("../Automation/googleClick");
 const { taskTimeoutMs } = require("../../config/app");
+const runScheduleService = require("./runScheduleService");
 
 function withTimeout(promise, timeoutMs) {
   let timeoutId;
@@ -15,12 +16,15 @@ function withTimeout(promise, timeoutMs) {
 }
 
 class TaskRunService {
-  constructor(repository = taskRepository, browserAutomation = runGoogleSearchClick) {
+  constructor(repository = taskRepository, browserAutomation = runGoogleSearchClick, scheduleService = runScheduleService) {
     this.repository = repository;
     this.browserAutomation = browserAutomation;
+    this.scheduleService = scheduleService;
   }
 
   async run(task, run, index) {
+    await this.scheduleService.waitUntil(run.scheduledAt);
+
     await this.repository.updateRun(task._id, index, {
       status: "running",
       startedAt: new Date()

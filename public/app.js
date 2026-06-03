@@ -17,7 +17,7 @@ function renderTask(task) {
     <div class="run-row">
       <span>${escapeHtml(run.keyword)}</span>
       <span>${statusBadge(run.status)}</span>
-      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>` : escapeHtml(run.error || "-")}</span>
+      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
     </div>
   `).join("");
 
@@ -31,7 +31,7 @@ function renderTask(task) {
         <div>${statusBadge(task.status)}</div>
       </div>
       <div class="task-meta mt-2">
-        ${task.count} browser · ${task.headless ? "headless" : "visible"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
+        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
       </div>
       <div class="progress mt-3" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
         <div class="progress-bar" style="width:${percent}%">${percent}%</div>
@@ -101,7 +101,8 @@ $("#taskForm").on("submit", async function (event) {
       data: JSON.stringify({
         keywords: $("#keywords").val(),
         targetAddress: $("#targetAddress").val(),
-        count: Number($("#count").val()),
+        clickCount: Number($("#count").val()),
+        durationHours: Number($("#durationHours").val()),
         headless: $("#headless").is(":checked"),
         proxyUrl: $("#proxyUrl").val(),
         cookies: $("#cookies").val()

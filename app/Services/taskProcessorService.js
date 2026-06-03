@@ -14,7 +14,10 @@ class TaskProcessorService {
     const task = await this.repository.findById(job.data.taskId);
     if (!task) throw new Error(`Task not found: ${job.data.taskId}`);
 
-    await this.repository.startProcessing(task._id, buildQueuedRuns(task.keywords, task.count));
+    await this.repository.startProcessing(task._id, buildQueuedRuns(task.keywords, task.count, {
+      durationHours: task.durationHours,
+      startsAt: new Date()
+    }));
     const startedTask = await this.repository.findById(task._id);
 
     await mapWithConcurrency(startedTask.runs, maxParallelBrowsers, async (run, index) => {

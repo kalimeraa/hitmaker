@@ -14,6 +14,7 @@ services:
       QUEUE_NAME: browser-tasks
       MAX_PARALLEL_BROWSERS: 4
       TASK_TIMEOUT_MS: 120000
+      GOOGLE_MAX_RESULT_PAGES: 10
       CLOAKBROWSER_GEOIP: "true"
       CLOAKBROWSER_HUMANIZE: "true"
       CLOAKBROWSER_HUMAN_PRESET: default
@@ -34,6 +35,7 @@ services:
       QUEUE_NAME: browser-tasks
       MAX_PARALLEL_BROWSERS: 4
       TASK_TIMEOUT_MS: 120000
+      GOOGLE_MAX_RESULT_PAGES: 10
       CLOAKBROWSER_GEOIP: "true"
       CLOAKBROWSER_HUMANIZE: "true"
       CLOAKBROWSER_HUMAN_PRESET: default

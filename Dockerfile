@@ -9,13 +9,15 @@ ENV CLOAKBROWSER_AUTO_UPDATE=false
 USER root
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
-
-COPY . .
 RUN chown -R pwuser:pwuser /app /home/pwuser
 
 USER pwuser
 RUN npx cloakbrowser install
 
+USER root
+COPY --chown=pwuser:pwuser . .
+
+USER pwuser
 EXPOSE 3000
 
 CMD ["npm", "start"]

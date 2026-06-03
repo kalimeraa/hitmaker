@@ -75,6 +75,7 @@ Docker build tüm proje ağacını kopyalar; Laravel benzeri `app/`, `bootstrap/
 - `QUEUE_NAME`: BullMQ queue adı.
 - `MAX_PARALLEL_BROWSERS`: Aynı job içinde kaç browser context paralel çalışacak.
 - `TASK_TIMEOUT_MS`: Sayfa aksiyonları için timeout.
+- `GOOGLE_MAX_RESULT_PAGES`: Hedef domain bulunana kadar kaç Google sonuç sayfası gezileceği. Varsayılan `10`.
 - `CLOAKBROWSER_GEOIP`: Proxy varsa timezone/locale değerlerini proxy IP'sine göre otomatik çözmeye çalışır.
 - `CLOAKBROWSER_LOCALE`: CloakBrowser locale ayarı. Örnek: `en-US`.
 - `CLOAKBROWSER_TIMEZONE`: CloakBrowser timezone ayarı. Örnek: `America/New_York`.
@@ -86,7 +87,10 @@ Docker build tüm proje ağacını kopyalar; Laravel benzeri `app/`, `bootstrap/
 
 ## Kullanım Notları
 
-- UI'daki `Browser sayısı` toplam kaç run üretileceğini belirler.
+- Task payload'ında `clickCount` toplam kaç click/run üretileceğini belirler. Eski `count` alanı geriye uyumluluk için kabul edilir.
+- Task payload'ında `durationHours` clicklerin kaç saatlik pencereye yayılacağını belirler. `0` ise run'lar hemen başlar.
+- `durationHours > 0` olduğunda süre `clickCount` kadar parçaya bölünür ve her click kendi parçası içinde random bir zamanda planlanır; böylece mekanik eşit aralık oluşmaz.
+- Google sonuçlarında hedef domain ilk sayfada bulunamazsa `GOOGLE_MAX_RESULT_PAGES` sınırına kadar sayfa sayfa ilerler.
 - `MAX_PARALLEL_BROWSERS` aynı anda kaç run çalışacağını sınırlar.
 - `Headless` kapatılırsa worker browser pencerelerini görünür açmaya çalışır; Docker içinde genellikle headless kullanılmalıdır.
 - Hedef site alanına `facebook.com` veya `https://www.facebook.com` formatında değer girilebilir.
@@ -94,3 +98,25 @@ Docker build tüm proje ağacını kopyalar; Laravel benzeri `app/`, `bootstrap/
 - Cookie alanı satır satır `name=value` veya JSON cookie objesi/array'i kabul eder.
 - Sistem hataları UI'daki `Hatalar` sekmesinden veya `GET /api/errors` endpoint'inden izlenir.
 - Docker Compose içindeki MongoDB geliştirme kolaylığı için `tmpfs` kullanır; container yeniden yaratılırsa task kayıtları silinir.
+
+## Task Payload
+
+```json
+{
+  "keywords": "facebook",
+  "targetAddress": "facebook.com",
+  "clickCount": 10,
+  "durationHours": 2,
+  "headless": true,
+  "proxyUrl": "",
+  "cookies": ""
+}
+```
+
+- `keywords`: Zorunlu. Virgül veya satır satır ayrılmış keyword listesi.
+- `targetAddress`: Zorunlu. Domain veya URL.
+- `clickCount`: Zorunlu. `1-50` arası toplam click sayısı.
+- `durationHours`: Opsiyonel. `0-720` arası saat. Clickler bu pencereye random dağıtılır.
+- `headless`: Boolean.
+- `proxyUrl`: Opsiyonel proxy URL.
+- `cookies`: Opsiyonel `name=value` satırları veya JSON cookie objesi/array'i.

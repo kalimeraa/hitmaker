@@ -3,10 +3,25 @@ function expandKeywords(keywords, count) {
   return Array.from({ length: count }, (_, index) => cleanKeywords[index % cleanKeywords.length]);
 }
 
-function buildQueuedRuns(keywords, count) {
-  return expandKeywords(keywords, count).map((keyword) => ({
+function calculateScheduledAt(startsAt, durationHours, count, index) {
+  if (!durationHours) return startsAt;
+
+  const durationMs = durationHours * 60 * 60 * 1000;
+  const bucketMs = durationMs / count;
+  const bucketStartMs = bucketMs * index;
+  const randomOffsetMs = Math.floor(Math.random() * bucketMs * 0.85);
+  const offsetMs = Math.floor(bucketStartMs + randomOffsetMs);
+  return new Date(startsAt.getTime() + offsetMs);
+}
+
+function buildQueuedRuns(keywords, count, options = {}) {
+  const startsAt = options.startsAt || new Date();
+  const durationHours = Number(options.durationHours || 0);
+
+  return expandKeywords(keywords, count).map((keyword, index) => ({
     keyword,
-    status: "queued"
+    status: "queued",
+    scheduledAt: calculateScheduledAt(startsAt, durationHours, count, index)
   }));
 }
 

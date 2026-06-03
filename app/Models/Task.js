@@ -10,6 +10,7 @@ const runSchema = new mongoose.Schema(
     },
     matchedUrl: String,
     error: String,
+    scheduledAt: Date,
     startedAt: Date,
     finishedAt: Date
   },
@@ -21,6 +22,7 @@ const taskSchema = new mongoose.Schema(
     keywords: [String],
     targetAddress: { type: String, required: true },
     count: { type: Number, required: true, min: 1, max: 50 },
+    durationHours: { type: Number, default: 0, min: 0 },
     headless: { type: Boolean, default: true },
     proxyUrl: String,
     cookies: [

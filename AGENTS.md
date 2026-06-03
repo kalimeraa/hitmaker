@@ -60,7 +60,9 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Repository içinde business status hesabı, job progress hesabı veya browser logic yazma.
 - Domain fonksiyonları saf kalmalı; side effect içermemeli.
 - Service dosyaları küçük use-case'lere bölünmeli. Bir service büyüyorsa yeni service veya domain modülü çıkar.
+- Click scheduling kararı `app/Domain/taskRunPlanner.js` içinde kalmalı; gerçek bekleme/sleep davranışı `app/Services/runScheduleService.js` içinde kalmalı.
 - Browser launch ayarları sadece `app/Automation/cloakBrowserClient.js` içinde değiştirilmeli.
+- Google sonuç sayfası arama/sayfalama davranışı `app/Automation/googleSearchResults.js` içinde kalmalı.
 - Cookie dönüşümü sadece `app/Automation/browserCookies.js` içinde kalmalı.
 - Queue publish sadece `app/Services/taskJobService.js` sınırında kalmalı.
 - Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.

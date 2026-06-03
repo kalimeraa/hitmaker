@@ -23,6 +23,17 @@ function normalizeProxyUrl(value) {
   return proxyUrl;
 }
 
+function parseDurationHours(value) {
+  if (value === "" || typeof value === "undefined" || value === null) return 0;
+
+  const durationHours = Number(value);
+  if (!Number.isFinite(durationHours) || durationHours < 0 || durationHours > 720) {
+    throw new HttpError(400, "Duration hours must be a number between 0 and 720");
+  }
+
+  return durationHours;
+}
+
 function parseCookies(value, targetAddress) {
   const raw = String(value || "").trim();
   if (!raw) return [];
@@ -74,7 +85,7 @@ function parseCookies(value, targetAddress) {
 
 function validateCreateTaskPayload(body) {
   const keywords = parseKeywords(body.keywords);
-  const count = Number(body.count);
+  const count = Number(body.clickCount ?? body.count);
   const targetAddress = String(body.targetAddress || "").trim();
 
   if (!keywords.length) {
@@ -92,6 +103,7 @@ function validateCreateTaskPayload(body) {
   return {
     keywords,
     count,
+    durationHours: parseDurationHours(body.durationHours),
     targetAddress,
     headless: Boolean(body.headless),
     proxyUrl: normalizeProxyUrl(body.proxyUrl),
