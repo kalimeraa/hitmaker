@@ -10,9 +10,11 @@ Node.js tabanlı Google task runner. Express HTTP katmanı EJS view render eder,
 - Docker UI portu: `http://localhost:3100`.
 - Container içi app portu: `3000`.
 - Redis ve MongoDB Docker Compose içinde host portu yayınlamaz; başka projelerdeki Redis/Mongo portlarıyla çakışmaz.
-- Task silme desteklenir. Silinen task `cancelled` olur, bekleyen BullMQ job'ları kaldırılır ve aktif run ilk cancellation kontrolünde kapanır.
+- Task silme desteklenir. Silinen task MongoDB'den kaldırılır, bekleyen BullMQ job'ları kaldırılır ve aktif run ilk cancellation kontrolünde kapanır.
 - Google sonucu ilk sayfada bulunamazsa `GOOGLE_MAX_RESULT_PAGES` kadar sayfa sayfa aranır.
 - Tüm önemli aksiyonlar loglanır: request, task create/delete, queue, run start/end/fail, browser navigation, Google page check, match/not_found ve error.
+- UI reactive çalışır. Task, log ve hata değişimleri Redis pub/sub üzerinden `/api/events` SSE stream'ine akar; sayfayı yenilemeden task kartları ve log ekranı anlık güncellenir.
+- Task listesi 10'lu sayfalama ile gösterilir. Her task kartının içindeki run listesi de 10'lu sayfalıdır.
 
 ## Mimari
 
@@ -30,7 +32,8 @@ Proje Laravel benzeri MVC + service/repository/domain ayrımıyla düzenlenmişt
 - `app/Models/`: Mongoose model katmanıdır.
 - `app/Validators/`: Gelen payload'ı doğrular ve normalize eder.
 - `app/Domain/`: Saf domain kararlarını tutar. Run planlama ve final status hesabı burada yapılır.
-- `app/Services/`: Use-case katmanıdır. Task create/list/delete, queue publish, worker orchestration, run execution, cancellation ve logging burada yönetilir.
+- `app/Services/`: Use-case katmanıdır. Task create/list/delete, queue publish, worker orchestration, run execution, cancellation, realtime event ve logging burada yönetilir.
+- `app/Services/realtimeEventService.js`: Redis pub/sub tabanlı canlı event yayınlama sınırıdır.
 - `app/Repositories/`: MongoDB erişimini soyutlar.
 - `app/Automation/`: CloakBrowser, cookie uygulama ve Google arama/click otomasyonu burada izole edilir.
 - `app/Utils/`: Ortak yardımcılar, domain eşleştirme ve HTTP error sınıflarıdır.
@@ -182,6 +185,14 @@ Task sil/cancel:
 curl -sS -X DELETE http://127.0.0.1:3100/api/tasks/<task-id>
 ```
 
+Run retry:
+
+```bash
+curl -sS -X POST http://127.0.0.1:3100/api/tasks/<task-id>/runs/<run-index>/retry
+```
+
+`retry` sadece ilgili run'ı tekrar kuyruğa alır. Task'ın tamamı baştan çalışmaz; sonuç aynı run satırına canlı olarak yansır.
+
 Loglar:
 
 ```bash
@@ -199,6 +210,14 @@ Health:
 ```bash
 curl -sS http://127.0.0.1:3100/api/health
 ```
+
+Canlı event stream:
+
+```bash
+curl -N http://127.0.0.1:3100/api/events
+```
+
+`/api/events`, Server-Sent Events formatında `task.updated`, `task.deleted`, `log.created`, `completed`, `failed`, `progress` ve `heartbeat` eventlerini yayınlar. UI bu stream ile reactive çalışır; polling ana akışta kullanılmaz.
 
 ## Google Arama Davranışı
 
@@ -230,7 +249,9 @@ Loglar console'a ve MongoDB `logentries` collection'ına yazılır. UI'daki `Log
 
 - `http_request`
 - `task_created`
-- `task_cancelled`
+- `task_deleted`
+- `run_retry_queued`
+- `run_retry_finished`
 - `task_job_enqueued`
 - `task_run_started`
 - `browser_context_started`

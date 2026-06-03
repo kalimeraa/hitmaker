@@ -1,11 +1,9 @@
-<main class="container-fluid py-4">
-  <div class="row g-4">
-    <section class="col-12 col-xl-4">
-      <%- include("components/taskForm") %>
-    </section>
+<main class="app-shell">
+  <section class="task-form-column">
+    <%- include("components/taskForm") %>
+  </section>
 
-    <section class="col-12 col-xl-8">
-      <%- include("components/taskTabs") %>
-    </section>
-  </div>
+  <section class="task-board-column">
+    <%- include("components/taskTabs") %>
+  </section>
 </main>

@@ -27,6 +27,7 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - `app/Domain/`: Saf iş kuralları ve hesaplamalar. Database, queue, HTTP veya browser dependency'si almamalıdır.
 - `app/Validators/`: HTTP payload normalize ve validate eder. Request body'sini uygulama içi DTO'ya çevirir.
 - `app/Services/`: Use-case ve orchestration katmanı. Controller'dan gelen işi repository, domain, queue ve automation adapter'larına dağıtır.
+- `app/Services/realtimeEventService.js`: Redis pub/sub üzerinden canlı UI eventleri yayınlama sınırıdır.
 - `app/Http/Controllers/`: HTTP request/response sınırı. Sadece service çağırır, status code döner, JSON body üretir veya view render eder.
 - `app/Http/Middleware/`: Express middleware katmanı. Cross-cutting HTTP davranışları burada kalır.
 - `views/`: EJS template katmanı. HTML burada tutulur; iş kuralı, database erişimi veya queue/browser logic içermez. View'lar layout, partial, page ve component olarak bölünmelidir.
@@ -68,6 +69,9 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.
 - Yeni route eklenirse kaynak bazlı route dosyası aç veya mevcut kaynak route'una ekle; `routes/index.js` sadece router mount etsin.
 - Task lifecycle, worker lifecycle, browser navigation, Google sayfalama, proxy kullanımı, click sonucu, hata ve cancellation dahil tüm önemli aksiyonlar `app/Services/logService.js` logger'ı ile loglanmalı.
+- UI manuel yenileme veya polling'e bağımlı olmamalıdır. Task, run, log ve error değişimleri `app/Services/realtimeEventService.js` üzerinden Redis pub/sub ile yayınlanmalı ve `/api/events` SSE stream'i üzerinden browser'a anlık akmalıdır.
+- Task listesi ve task içindeki run listeleri 10'lu sayfalama ile gösterilmelidir. Canlı event geldiğinde mevcut sayfa korunarak yeniden render edilmelidir.
+- Başarısız run retry davranışı run seviyesinde kalmalıdır. Retry endpoint'i sadece ilgili run'ı tekrar kuyruğa almalı; task'ın tüm run listesini yeniden oluşturmamalıdır.
 - HTML sayfası gerekiyorsa `public/*.html` yazma; `views/` altında EJS view oluştur ve controller üzerinden render et.
 - View tek büyük dosya olmamalı. Shell için `views/layouts/`, tekrar eden parçalar için `views/partials/`, sayfa içeriği için kaynak bazlı klasörler ve küçük UI parçaları için `components/` kullan.
 - Async controller hataları `app/Http/Middleware/asyncHandler.js` ile yakalanmalı.

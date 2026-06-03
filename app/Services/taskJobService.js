@@ -13,6 +13,17 @@ class TaskJobService {
     });
   }
 
+  enqueueRunRetry(taskId, runIndex) {
+    return this.queue.add("retry-run", {
+      taskId: String(taskId),
+      runIndex: Number(runIndex)
+    }, {
+      attempts: 1,
+      removeOnComplete: 100,
+      removeOnFail: 100
+    });
+  }
+
   async removeTaskJobs(taskId) {
     const jobs = await this.queue.getJobs(["waiting", "delayed", "prioritized", "paused"]);
     await Promise.all(jobs

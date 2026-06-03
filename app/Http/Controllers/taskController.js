@@ -22,6 +22,12 @@ class TaskController {
     if (!task) return res.status(404).json({ error: "Task not found" });
     res.json(task);
   }
+
+  async retryRun(req, res) {
+    const result = await taskService.retryRun(req.params.id, req.params.runIndex);
+    if (!result) return res.status(404).json({ error: "Run not found" });
+    res.status(202).json(result);
+  }
 }
 
 module.exports = new TaskController();

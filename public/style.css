@@ -7,10 +7,26 @@
 
 body {
   background: var(--page-bg);
+  color: #1f2937;
+  overflow-x: hidden;
 }
 
 .navbar {
   min-height: 58px;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 24px;
+  width: min(100% - 32px, 1680px);
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.task-form-column,
+.task-board-column {
+  min-width: 0;
 }
 
 .panel {
@@ -18,6 +34,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .panel-header {
@@ -41,6 +58,31 @@ h2 {
   margin-bottom: 12px;
 }
 
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #146c43;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.live-indicator::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #198754;
+}
+
+.live-indicator.is-offline {
+  color: #842029;
+}
+
+.live-indicator.is-offline::before {
+  background: #dc3545;
+}
+
 .tasks {
   display: grid;
   gap: 12px;
@@ -51,6 +93,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .task-meta {
@@ -60,8 +103,6 @@ h2 {
 
 .run-list {
   margin-top: 12px;
-  max-height: 260px;
-  overflow: auto;
   border-top: 1px solid var(--line);
 }
 
@@ -77,6 +118,21 @@ h2 {
 
 .run-row span {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.run-retry-btn {
+  min-width: 54px;
+}
+
+.run-row a {
   overflow-wrap: anywhere;
 }
 
@@ -97,6 +153,28 @@ h2 {
 .status-clicked { background: #d1e7dd; color: #146c43; }
 .status-not_found { background: #f8d7da; color: #842029; }
 .status-failed { background: #f8d7da; color: #842029; }
+.status-cancelled { background: #f8d7da; color: #842029; }
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.pager-summary {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.empty-state {
+  color: var(--text-soft);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.6);
+}
 
 .log-viewer {
   display: grid;
@@ -145,6 +223,11 @@ h2 {
 }
 
 @media (max-width: 720px) {
+  .app-shell {
+    width: min(100% - 20px, 100%);
+    padding: 16px 0;
+  }
+
   .run-row {
     grid-template-columns: 1fr;
     gap: 4px;
@@ -155,6 +238,12 @@ h2 {
   }
 
   .error-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-shell {
     grid-template-columns: 1fr;
   }
 }

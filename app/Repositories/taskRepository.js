@@ -36,12 +36,38 @@ class TaskRepository {
     return Task.updateOne({ _id: taskId }, { $set: set });
   }
 
+  prepareRunRetry(taskId, runIndex) {
+    return Task.updateOne({ _id: taskId }, {
+      $set: {
+        status: "running",
+        [`runs.${runIndex}.status`]: "queued",
+        [`runs.${runIndex}.scheduledAt`]: new Date()
+      },
+      $unset: {
+        error: "",
+        [`runs.${runIndex}.matchedUrl`]: "",
+        [`runs.${runIndex}.resultPage`]: "",
+        [`runs.${runIndex}.error`]: "",
+        [`runs.${runIndex}.startedAt`]: "",
+        [`runs.${runIndex}.finishedAt`]: ""
+      }
+    });
+  }
+
   completeRun(taskId, runIndex, payload) {
     const set = {};
     Object.entries(payload).forEach(([key, value]) => {
       set[`runs.${runIndex}.${key}`] = value;
     });
     return Task.updateOne({ _id: taskId }, { $set: set, $inc: { progress: 1 } });
+  }
+
+  replaceRunResult(taskId, runIndex, payload) {
+    const set = {};
+    Object.entries(payload).forEach(([key, value]) => {
+      set[`runs.${runIndex}.${key}`] = value;
+    });
+    return Task.updateOne({ _id: taskId }, { $set: set });
   }
 
   markFailed(taskId, error) {
@@ -56,6 +82,10 @@ class TaskRepository {
       status: "cancelled",
       error: "Task cancelled"
     }, { new: true });
+  }
+
+  deleteById(taskId) {
+    return Task.findByIdAndDelete(taskId).lean();
   }
 }
 

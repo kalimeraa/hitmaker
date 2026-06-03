@@ -3,6 +3,7 @@ const { calculateProgressPercent } = require("../Domain/taskRunPlanner");
 const { runGoogleSearchClick } = require("../Automation/googleClick");
 const { taskTimeoutMs } = require("../../config/app");
 const { logger } = require("./logService");
+const realtimeEventService = require("./realtimeEventService");
 const taskCancellationService = require("./taskCancellationService");
 const runScheduleService = require("./runScheduleService");
 
@@ -25,8 +26,10 @@ class TaskRunService {
     this.cancellationService = cancellationService;
   }
 
-  async run(task, run, index) {
-    await this.scheduleService.waitUntil(run.scheduledAt);
+  async run(task, run, index, options = {}) {
+    if (!options.ignoreSchedule) {
+      await this.scheduleService.waitUntil(run.scheduledAt);
+    }
     await this.cancellationService.assertNotCancelled(task._id);
 
     const logAutomationEvent = (event, meta = {}) => {
@@ -43,6 +46,7 @@ class TaskRunService {
       status: "running",
       startedAt: new Date()
     });
+    await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_started", runIndex: index });
     logAutomationEvent("task_run_started");
 
     try {
@@ -62,19 +66,29 @@ class TaskRunService {
         }
       }), taskTimeoutMs + 5000);
 
-      await this.repository.completeRun(task._id, index, {
+      const finishRun = options.incrementProgress === false
+        ? this.repository.replaceRunResult.bind(this.repository)
+        : this.repository.completeRun.bind(this.repository);
+
+      await finishRun(task._id, index, {
         status: result.status,
         matchedUrl: result.matchedUrl,
         resultPage: result.resultPage,
         finishedAt: new Date()
       });
+      await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_completed", runIndex: index });
       logAutomationEvent("task_run_completed", result);
     } catch (error) {
-      await this.repository.completeRun(task._id, index, {
+      const finishRun = options.incrementProgress === false
+        ? this.repository.replaceRunResult.bind(this.repository)
+        : this.repository.completeRun.bind(this.repository);
+
+      await finishRun(task._id, index, {
         status: "failed",
         error: error.message,
         finishedAt: new Date()
       });
+      await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_failed", runIndex: index });
       logAutomationEvent("task_run_failed", { error: error.message });
     }
   }

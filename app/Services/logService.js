@@ -1,5 +1,6 @@
 const winston = require("winston");
 const logRepository = require("../Repositories/logRepository");
+const realtimeEventService = require("./realtimeEventService");
 
 class MongoLogTransport extends winston.Transport {
   constructor(repository = logRepository) {
@@ -16,6 +17,8 @@ class MongoLogTransport extends winston.Transport {
       message,
       service: service || process.env.SERVICE_NAME || "app",
       meta
+    }).then((log) => {
+      realtimeEventService.publish("log.created", log.toObject()).catch(() => {});
     }).catch(() => {});
 
     callback();
