@@ -3,16 +3,19 @@ const taskRepository = require("../Repositories/taskRepository");
 const taskRunService = require("./taskRunService");
 const { mapWithConcurrency } = require("../Utils/concurrency");
 const { buildQueuedRuns, resolveFinalTaskStatus } = require("../Domain/taskRunPlanner");
+const taskCancellationService = require("./taskCancellationService");
 
 class TaskProcessorService {
-  constructor(repository = taskRepository, runService = taskRunService) {
+  constructor(repository = taskRepository, runService = taskRunService, cancellationService = taskCancellationService) {
     this.repository = repository;
     this.runService = runService;
+    this.cancellationService = cancellationService;
   }
 
   async process(job) {
     const task = await this.repository.findById(job.data.taskId);
     if (!task) throw new Error(`Task not found: ${job.data.taskId}`);
+    await this.cancellationService.assertNotCancelled(task._id);
 
     await this.repository.startProcessing(task._id, buildQueuedRuns(task.keywords, task.count, {
       durationHours: task.durationHours,

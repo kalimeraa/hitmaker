@@ -11,13 +11,19 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+async function deleteTask(taskId) {
+  if (!confirm("Task iptal edilsin mi?")) return;
+  await $.ajax({ method: "DELETE", url: `/api/tasks/${encodeURIComponent(taskId)}` });
+  await loadTasks();
+}
+
 function renderTask(task) {
   const percent = task.count ? Math.round((task.progress / task.count) * 100) : 0;
   const runs = (task.runs || []).map((run) => `
     <div class="run-row">
       <span>${escapeHtml(run.keyword)}</span>
       <span>${statusBadge(run.status)}</span>
-      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
+      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>${run.resultPage ? ` · page ${run.resultPage}` : ""}` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
     </div>
   `).join("");
 
@@ -28,7 +34,10 @@ function renderTask(task) {
           <div class="fw-semibold">${escapeHtml(task.targetAddress)}</div>
           <div class="task-meta">${escapeHtml(task.keywords.join(", "))}</div>
         </div>
-        <div>${statusBadge(task.status)}</div>
+        <div class="d-flex gap-2 align-items-start">
+          <button class="btn btn-outline-danger btn-sm" data-delete-task="${escapeHtml(task._id)}" type="button">Sil</button>
+          <div>${statusBadge(task.status)}</div>
+        </div>
       </div>
       <div class="task-meta mt-2">
         ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
@@ -117,6 +126,11 @@ $("#taskForm").on("submit", async function (event) {
 });
 
 $("#refreshBtn").on("click", loadTasks);
+$("#tasks").on("click", "[data-delete-task]", function () {
+  deleteTask($(this).data("delete-task")).catch((error) => {
+    alert((error.responseJSON && error.responseJSON.error) || "Task silinemedi");
+  });
+});
 $("#refreshLogsBtn").on("click", loadLogs);
 $("#refreshErrorsBtn").on("click", loadErrors);
 $("#logLevel").on("change", loadLogs);

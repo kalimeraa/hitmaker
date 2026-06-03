@@ -18,6 +18,12 @@ module.exports = {
   maxParallelBrowsers: Number(process.env.MAX_PARALLEL_BROWSERS || 4),
   taskTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || 120000),
   googleMaxResultPages: Number(process.env.GOOGLE_MAX_RESULT_PAGES || 10),
+  googleSearch: {
+    hl: process.env.GOOGLE_SEARCH_HL || "tr",
+    gl: process.env.GOOGLE_SEARCH_GL || "tr",
+    pws: process.env.GOOGLE_SEARCH_PWS || "",
+    udm: process.env.GOOGLE_SEARCH_UDM || ""
+  },
   cloakBrowser: {
     locale: process.env.CLOAKBROWSER_LOCALE || undefined,
     timezone: process.env.CLOAKBROWSER_TIMEZONE || undefined,

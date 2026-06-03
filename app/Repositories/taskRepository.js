@@ -50,6 +50,13 @@ class TaskRepository {
       error
     });
   }
+
+  cancel(taskId) {
+    return Task.findByIdAndUpdate(taskId, {
+      status: "cancelled",
+      error: "Task cancelled"
+    }, { new: true });
+  }
 }
 
 module.exports = new TaskRepository();

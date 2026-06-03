@@ -67,6 +67,7 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Queue publish sadece `app/Services/taskJobService.js` sınırında kalmalı.
 - Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.
 - Yeni route eklenirse kaynak bazlı route dosyası aç veya mevcut kaynak route'una ekle; `routes/index.js` sadece router mount etsin.
+- Task lifecycle, worker lifecycle, browser navigation, Google sayfalama, proxy kullanımı, click sonucu, hata ve cancellation dahil tüm önemli aksiyonlar `app/Services/logService.js` logger'ı ile loglanmalı.
 - HTML sayfası gerekiyorsa `public/*.html` yazma; `views/` altında EJS view oluştur ve controller üzerinden render et.
 - View tek büyük dosya olmamalı. Shell için `views/layouts/`, tekrar eden parçalar için `views/partials/`, sayfa içeriği için kaynak bazlı klasörler ve küçük UI parçaları için `components/` kullan.
 - Async controller hataları `app/Http/Middleware/asyncHandler.js` ile yakalanmalı.
@@ -80,6 +81,23 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Playwright/CloakBrowser ayarları tek yerde toplanır: `app/Automation/cloakBrowserClient.js`.
 - CloakBrowser humanize ve geoip ayarları config üzerinden yönetilir.
 - Browser otomasyonunda mümkün olduğunca Playwright locator/selector aksiyonları kullanılmalıdır; humanize katmanını bypass eden doğrudan DOM click'lerinden kaçınılmalıdır.
+
+## Google Search URL Kuralları
+
+Google arama URL davranışında BrightData'nın Google Search URL Parameters referansı esas alınmalıdır:
+
+- Referans: `https://brightdata.com/blog/web-data/google-search-url-parameters`
+- Google query üretimi tek yerde yapılmalıdır: `app/Automation/googleSearchUrl.js`.
+- Arama URL'sinde `q` ana parametredir ve URL builder içinde önce set edilmelidir.
+- Pagination için `start` kullanılmalıdır: `start=0` ilk sayfa, `start=10` ikinci sayfa, `start=20` üçüncü sayfa.
+- `num` parametresi kullanılmamalıdır; 2025 sonrası güvenilir değildir ve Google tarafından yok sayılabilir.
+- `pws` opsiyoneldir. Normal kullanıcı SERP'ine yakın davranmak için varsayılan boş kalmalıdır; kişiselleştirmeyi azaltmak veya rank-tracking yapmak için config ile `GOOGLE_SEARCH_PWS=0` verilir.
+- `udm` opsiyoneldir. Kullanıcının normal Google "All" sonuçlarına yakın davranmak için varsayılan boş kalmalıdır; klasik web/AI'sız SERP istenirse config ile `GOOGLE_SEARCH_UDM=14` verilir.
+- Dil ve ülke hedeflemesi config üzerinden yönetilmelidir: `GOOGLE_SEARCH_HL`, `GOOGLE_SEARCH_GL`.
+- Varsayılan Türkiye akışı `hl=tr`, `gl=tr` ile çalışır.
+- Google ccTLD üzerinden lokasyon varsayımı yapılmamalıdır; lokasyon davranışı `gl` ve gerekirse browser/proxy geo ayarları ile yönetilmelidir.
+- `ei`, `ved`, `sxsrf`, `sstk` gibi session/tracking parametreleri kod tarafından üretilmemelidir.
+- Sonuçlar lokasyon, personalization, proxy, browser state ve Google varyasyonları nedeniyle kullanıcının manuel tarayıcısından farklı olabilir; bu yüzden her sayfa kontrolü ve match/not_found sonucu loglanmalıdır.
 
 ## Doğrulama
 

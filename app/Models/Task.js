@@ -9,6 +9,7 @@ const runSchema = new mongoose.Schema(
       default: "queued"
     },
     matchedUrl: String,
+    resultPage: Number,
     error: String,
     scheduledAt: Date,
     startedAt: Date,
@@ -42,7 +43,7 @@ const taskSchema = new mongoose.Schema(
     ],
     status: {
       type: String,
-      enum: ["queued", "running", "completed", "failed"],
+      enum: ["queued", "running", "completed", "failed", "cancelled"],
       default: "queued"
     },
     progress: { type: Number, default: 0 },

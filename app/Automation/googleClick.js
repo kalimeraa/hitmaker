@@ -2,7 +2,8 @@ const { googleMaxResultPages, taskTimeoutMs } = require("../../config/app");
 const { applyCookies } = require("./browserCookies");
 const { launchBrowserContext } = require("./cloakBrowserClient");
 const { findResultAcrossPages } = require("./googleSearchResults");
-const { normalizeHost, hostnameMatches } = require("../Utils/domain");
+const { buildGoogleSearchUrl } = require("./googleSearchUrl");
+const { normalizeTarget, targetMatchesUrl } = require("../Utils/domain");
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -26,8 +27,31 @@ async function acceptConsentIfPresent(page) {
   }
 }
 
-async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl, cookies }) {
-  const targetHost = normalizeHost(targetAddress);
+function noop() {}
+
+async function neverCancelled() {
+  return false;
+}
+
+async function runCancellable(action, shouldCancel) {
+  let intervalId;
+  const cancellation = new Promise((_, reject) => {
+    intervalId = setInterval(async () => {
+      try {
+        if (await shouldCancel()) {
+          reject(new Error("Task cancelled"));
+        }
+      } catch (error) {
+        reject(error);
+      }
+    }, 1000);
+  });
+
+  return Promise.race([action(), cancellation]).finally(() => clearInterval(intervalId));
+}
+
+async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
+  const target = normalizeTarget(targetAddress);
   const context = await launchBrowserContext({ headless, proxyUrl });
 
   try {
@@ -35,20 +59,24 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     page.setDefaultTimeout(taskTimeoutMs);
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(keyword)}`;
-    await page.goto(`https://${targetHost}`, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }).catch(() => {});
-    await applyCookies(context, cookies, targetHost);
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
+    const searchUrl = buildGoogleSearchUrl(keyword);
+    onEvent("browser_context_started", { keyword, targetAddress, target });
+    await runCancellable(() => page.goto(`https://${target.host}`, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }).catch(() => {}), shouldCancel);
+    await applyCookies(context, cookies, target.host);
+    onEvent("google_search_navigation_started", { searchUrl });
+    await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
     await acceptConsentIfPresent(page);
 
-    const { matchedUrl, resultPage } = await findResultAcrossPages(page, targetHost, googleMaxResultPages);
+    const { matchedUrl, resultPage } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
 
-    if (!matchedUrl || !hostnameMatches(matchedUrl, targetHost)) {
+    if (!matchedUrl || !targetMatchesUrl(matchedUrl, target)) {
       return { status: "not_found", matchedUrl: null, resultPage };
     }
 
-    await page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
-    await page.waitForTimeout(2000);
+    onEvent("target_navigation_started", { matchedUrl, resultPage });
+    await runCancellable(() => page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
+    await runCancellable(() => page.waitForTimeout(2000), shouldCancel);
+    onEvent("target_navigation_completed", { matchedUrl, resultPage, finalUrl: page.url() });
     return { status: "clicked", matchedUrl, resultPage };
   } finally {
     await context.close();
