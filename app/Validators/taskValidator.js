@@ -34,6 +34,17 @@ function parseDurationHours(value) {
   return durationHours;
 }
 
+function parseMaxAttempts(value) {
+  if (value === "" || typeof value === "undefined" || value === null) return 3;
+
+  const maxAttempts = Number(value);
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+    throw new HttpError(400, "Max attempts must be an integer between 1 and 10");
+  }
+
+  return maxAttempts;
+}
+
 function parseCookies(value, targetAddress) {
   const raw = String(value || "").trim();
   if (!raw) return [];
@@ -103,6 +114,7 @@ function validateCreateTaskPayload(body) {
   return {
     keywords,
     count,
+    maxAttempts: parseMaxAttempts(body.maxAttempts ?? body.tries),
     durationHours: parseDurationHours(body.durationHours),
     targetAddress,
     headless: Boolean(body.headless),

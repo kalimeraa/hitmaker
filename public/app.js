@@ -8,6 +8,8 @@ let taskPage = 1;
 let allTasks = [];
 const runPages = new Map();
 let pendingTaskLoad = null;
+let candidateModal = null;
+let taskEditModal = null;
 
 function escapeHtml(value) {
   return String(value || "")
@@ -40,8 +42,106 @@ async function retryRun(taskId, runIndex) {
   });
 }
 
+async function updateTask(taskId, payload) {
+  await $.ajax({
+    method: "PUT",
+    url: `/api/tasks/${encodeURIComponent(taskId)}`,
+    contentType: "application/json",
+    data: JSON.stringify(payload)
+  });
+}
+
 function canRetryRun(run) {
   return run.status !== "clicked" && run.status !== "running" && run.status !== "queued";
+}
+
+function canInspectCandidates(run) {
+  return run.status !== "clicked";
+}
+
+function findTaskRun(taskId, runIndex) {
+  const task = allTasks.find((item) => String(item._id) === String(taskId));
+  if (!task || !task.runs) return { task: null, run: null };
+  return { task, run: task.runs[Number(runIndex)] || null };
+}
+
+function renderCandidateList(candidates) {
+  const sortedCandidates = [...candidates].sort((left, right) => {
+    const leftPage = Number(left.pageNumber || 0);
+    const rightPage = Number(right.pageNumber || 0);
+    if (leftPage !== rightPage) return leftPage - rightPage;
+    return String(left.href || "").localeCompare(String(right.href || ""));
+  });
+
+  if (!sortedCandidates.length) {
+    return `
+      <div class="empty-state">
+        Bu run sırasında aday adres kaydı yok. Google sonuç sayfası yerine challenge, captcha veya hata sayfası dönmüş olabilir.
+      </div>
+    `;
+  }
+
+  return `
+    <div class="candidate-list">
+      ${sortedCandidates.map((candidate) => `
+        <div class="candidate-row">
+          <div>
+            <div class="candidate-host">${escapeHtml(candidate.host)}${candidate.pageNumber ? ` · page ${escapeHtml(candidate.pageNumber)}` : ""}</div>
+            <div class="candidate-text">${escapeHtml(candidate.text || candidate.path || "")}</div>
+          </div>
+          <a href="${escapeHtml(candidate.href)}" target="_blank" rel="noreferrer">${escapeHtml(candidate.href)}</a>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function showCandidateModal(taskId, runIndex) {
+  const { task, run } = findTaskRun(taskId, runIndex);
+  if (!task || !run) return;
+
+  const candidates = run.candidates || [];
+  $("#candidateModalTitle").text(`${task.targetAddress} · ${run.keyword}`);
+  $("#candidateModalBody").html(`
+    <div class="candidate-summary">
+      <span>target: ${escapeHtml(task.targetAddress)}</span>
+      <span>keyword: ${escapeHtml(run.keyword)}</span>
+      <span>status: ${escapeHtml(run.status)}</span>
+      <span>attempts: ${escapeHtml(run.attempts || 0)}/${escapeHtml(task.maxAttempts || 3)}</span>
+      <span>${candidates.length} adres</span>
+    </div>
+    ${renderCandidateList(candidates)}
+  `);
+  candidateModal.show();
+}
+
+function showTaskEditModal(taskId) {
+  const task = allTasks.find((item) => String(item._id) === String(taskId));
+  if (!task) return;
+
+  $("#editTaskId").val(taskId);
+  $("#editKeywords").val((task.keywords || []).join("\n"));
+  $("#editTargetAddress").val(task.targetAddress || "");
+  $("#editCount").val(task.count || 1);
+  $("#editDurationHours").val(Number(task.durationHours || 0));
+  $("#editMaxAttempts").val(Number(task.maxAttempts || 3));
+  $("#editHeadless").prop("checked", Boolean(task.headless));
+  $("#editProxyUrl").val(task.proxyUrl || "");
+  $("#editCookies").val((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : "");
+  taskEditModal.show();
+}
+
+function readTaskEditPayload() {
+  return {
+    keywords: $("#editKeywords").val(),
+    targetAddress: $("#editTargetAddress").val(),
+    clickCount: Number($("#editCount").val()),
+    maxAttempts: Number($("#editMaxAttempts").val()),
+    durationHours: Number($("#editDurationHours").val()),
+    headless: $("#editHeadless").is(":checked"),
+    proxyUrl: $("#editProxyUrl").val(),
+    cookies: $("#editCookies").val()
+  };
 }
 
 function clampPage(page, totalPages) {
@@ -79,12 +179,15 @@ function renderTask(task) {
     const retryButton = canRetryRun(run)
       ? `<button class="btn btn-outline-primary btn-sm run-retry-btn" type="button" data-retry-task="${escapeHtml(taskId)}" data-retry-run="${runIndex}">Retry</button>`
       : "";
+    const candidateButton = canInspectCandidates(run)
+      ? `<button class="btn btn-outline-secondary btn-sm run-candidate-btn" type="button" data-candidate-task="${escapeHtml(taskId)}" data-candidate-run="${runIndex}">Adresler</button>`
+      : "";
 
     return `
     <div class="run-row">
       <span>${escapeHtml(run.keyword)}</span>
-      <span class="run-status-cell">${statusBadge(run.status)}${retryButton}</span>
-      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>${run.resultPage ? ` · page ${run.resultPage}` : ""}` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
+      <span class="run-status-cell">${statusBadge(run.status)}${retryButton}${candidateButton}</span>
+      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>${run.resultPage ? ` · page ${run.resultPage}` : ""}${run.resultRank ? ` · rank ${run.resultRank}` : ""}` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
     </div>
   `;
   }).join("");
@@ -97,12 +200,14 @@ function renderTask(task) {
           <div class="task-meta">${escapeHtml(task.keywords.join(", "))}</div>
         </div>
         <div class="d-flex gap-2 align-items-start">
+          <button class="btn btn-outline-secondary btn-sm" data-edit-task="${escapeHtml(taskId)}" type="button">Düzenle</button>
           <button class="btn btn-outline-danger btn-sm" data-delete-task="${escapeHtml(taskId)}" type="button">Sil</button>
           <div>${statusBadge(task.status)}</div>
         </div>
       </div>
       <div class="task-meta mt-2">
         ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
+        · retry ${task.maxAttempts || 3}
       </div>
       <div class="progress mt-3" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
         <div class="progress-bar" style="width:${percent}%">${percent}%</div>
@@ -213,6 +318,7 @@ $("#taskForm").on("submit", async function (event) {
         keywords: $("#keywords").val(),
         targetAddress: $("#targetAddress").val(),
         clickCount: Number($("#count").val()),
+        maxAttempts: Number($("#maxAttempts").val()),
         durationHours: Number($("#durationHours").val()),
         headless: $("#headless").is(":checked"),
         proxyUrl: $("#proxyUrl").val(),
@@ -240,6 +346,28 @@ $("#tasks").on("click", "[data-retry-task]", function () {
     alert((error.responseJSON && error.responseJSON.error) || "Run retry başlatılamadı");
     scheduleLoadTasks();
   });
+});
+$("#tasks").on("click", "[data-candidate-task]", function () {
+  showCandidateModal($(this).data("candidate-task"), Number($(this).data("candidate-run")));
+});
+$("#tasks").on("click", "[data-edit-task]", function () {
+  showTaskEditModal($(this).data("edit-task"));
+});
+$("#taskEditForm").on("submit", async function (event) {
+  event.preventDefault();
+  const taskId = $("#editTaskId").val();
+  const $button = $("#taskEditSaveBtn");
+  $button.prop("disabled", true).text("Kaydediliyor...");
+
+  try {
+    await updateTask(taskId, readTaskEditPayload());
+    taskEditModal.hide();
+    await loadTasks();
+  } catch (xhr) {
+    alert((xhr.responseJSON && xhr.responseJSON.error) || "Task güncellenemedi");
+  } finally {
+    $button.prop("disabled", false).text("Kaydet ve yeniden başlat");
+  }
 });
 $(document).on("click", "[data-page-target]", function () {
   const target = String($(this).data("page-target"));
@@ -286,6 +414,8 @@ events.addEventListener("log.created", (event) => {
   }
 });
 
+candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
+taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
 checkHealth();
 loadTasks();
 loadLogs();

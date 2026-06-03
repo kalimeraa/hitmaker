@@ -50,6 +50,28 @@ async function runCancellable(action, shouldCancel) {
   return Promise.race([action(), cancellation]).finally(() => clearInterval(intervalId));
 }
 
+async function scrollTargetPageLikeHuman(page, onEvent, shouldCancel) {
+  await onEvent("target_human_scroll_started", { url: page.url() });
+  await runCancellable(() => page.waitForTimeout(1800 + Math.floor(Math.random() * 2200)), shouldCancel);
+
+  const downSteps = 4 + Math.floor(Math.random() * 4);
+  for (let index = 0; index < downSteps; index += 1) {
+    await runCancellable(() => page.mouse.wheel(0, 360 + Math.floor(Math.random() * 360)), shouldCancel);
+    await runCancellable(() => page.waitForTimeout(700 + Math.floor(Math.random() * 1100)), shouldCancel);
+  }
+
+  await runCancellable(() => page.waitForTimeout(1600 + Math.floor(Math.random() * 2600)), shouldCancel);
+
+  const upSteps = 2 + Math.floor(Math.random() * 3);
+  for (let index = 0; index < upSteps; index += 1) {
+    await runCancellable(() => page.mouse.wheel(0, -300 - Math.floor(Math.random() * 260)), shouldCancel);
+    await runCancellable(() => page.waitForTimeout(700 + Math.floor(Math.random() * 1000)), shouldCancel);
+  }
+
+  await runCancellable(() => page.waitForTimeout(1800 + Math.floor(Math.random() * 2600)), shouldCancel);
+  await onEvent("target_human_scroll_completed", { url: page.url() });
+}
+
 async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
   const target = normalizeTarget(targetAddress);
   const context = await launchBrowserContext({ headless, proxyUrl });
@@ -60,26 +82,31 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     const searchUrl = buildGoogleSearchUrl(keyword);
-    onEvent("browser_context_started", { keyword, targetAddress, target });
+    await onEvent("browser_context_started", { keyword, targetAddress, target });
     await applyCookies(context, cookies, target.host);
     if ((cookies || []).length) {
-      onEvent("browser_cookies_applied", { cookieCount: cookies.length, targetHost: target.host });
+      await onEvent("browser_cookies_applied", { cookieCount: cookies.length, targetHost: target.host });
     }
-    onEvent("google_search_navigation_started", { searchUrl });
+    await onEvent("google_search_navigation_started", { searchUrl });
     await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
     await acceptConsentIfPresent(page);
 
-    const { matchedUrl, resultPage } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
+    const { matchedUrl, resultPage, resultRank, blockedByGoogle } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
+
+    if (blockedByGoogle) {
+      return { status: "blocked_by_google", matchedUrl: null, resultPage, googleBlocked: true };
+    }
 
     if (!matchedUrl || !targetMatchesUrl(matchedUrl, target)) {
       return { status: "not_found", matchedUrl: null, resultPage };
     }
 
-    onEvent("target_navigation_started", { matchedUrl, resultPage });
+    await onEvent("target_navigation_started", { matchedUrl, resultPage, resultRank });
     await runCancellable(() => page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
     await runCancellable(() => page.waitForTimeout(2000), shouldCancel);
-    onEvent("target_navigation_completed", { matchedUrl, resultPage, finalUrl: page.url() });
-    return { status: "clicked", matchedUrl, resultPage };
+    await scrollTargetPageLikeHuman(page, onEvent, shouldCancel);
+    await onEvent("target_navigation_completed", { matchedUrl, resultPage, resultRank, finalUrl: page.url() });
+    return { status: "clicked", matchedUrl, resultPage, resultRank };
   } finally {
     await context.close();
   }

@@ -64,6 +64,8 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Click scheduling kararı `app/Domain/taskRunPlanner.js` içinde kalmalı; gerçek bekleme/sleep davranışı `app/Services/runScheduleService.js` içinde kalmalı.
 - Browser launch ayarları sadece `app/Automation/cloakBrowserClient.js` içinde değiştirilmeli.
 - Google sonuç sayfası arama/sayfalama davranışı `app/Automation/googleSearchResults.js` içinde kalmalı.
+- Hedef siteye gidildikten sonra browser hemen kapanmamalıdır. `app/Automation/googleClick.js` içinde kısa bekleme, doğal aşağı/yukarı scroll ve final bekleme yapılmalı; bu aksiyonlar loglanmalıdır.
+- Google araması başlamadan önce hedef siteye preflight navigation yapılmamalı. Cookie gerekiyorsa `app/Automation/browserCookies.js` ile Playwright context'e domain bazlı eklenmelidir.
 - Cookie dönüşümü sadece `app/Automation/browserCookies.js` içinde kalmalı.
 - Queue publish sadece `app/Services/taskJobService.js` sınırında kalmalı.
 - Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.
@@ -72,6 +74,14 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - UI manuel yenileme veya polling'e bağımlı olmamalıdır. Task, run, log ve error değişimleri `app/Services/realtimeEventService.js` üzerinden Redis pub/sub ile yayınlanmalı ve `/api/events` SSE stream'i üzerinden browser'a anlık akmalıdır.
 - Task listesi ve task içindeki run listeleri 10'lu sayfalama ile gösterilmelidir. Canlı event geldiğinde mevcut sayfa korunarak yeniden render edilmelidir.
 - Başarısız run retry davranışı run seviyesinde kalmalıdır. Retry endpoint'i sadece ilgili run'ı tekrar kuyruğa almalı; task'ın tüm run listesini yeniden oluşturmamalıdır.
+- Run başına Laravel job `tries` benzeri `maxAttempts` davranışı korunmalıdır. Varsayılan `3` denemedir; `not_found` ve sistemsel hata sonuçları aynı run index'i üzerinde otomatik tekrar denenir. Ara retry'lar progress'i artırmamalıdır.
+- Manuel `Retry`, ilgili run'ın attempt/candidate/result alanlarını sıfırlayıp aynı run index'i için yeniden `maxAttempts` döngüsünü başlatmalıdır.
+- Task edit aynı task ID'sini korumalı, `runVersion` artırmalı, bekleyen job'ları temizlemeli, runs/progress alanlarını sıfırlamalı ve task'ı yeni payload ile yeniden kuyruğa almalıdır.
+- Google SERP adayları sadece logda kalmamalı; her run'ın `candidates` alanına `pageNumber`, `host`, `path`, `href`, `text` olarak kaydedilmelidir.
+- Match bulunduğunda run içinde `resultPage` ve `resultRank` kaydedilmelidir. UI bunu link yanında `page X · rank Y` şeklinde göstermelidir.
+- UI'da başarısız veya `not_found` run için `Adresler` modalı bulunmalıdır. Aday liste boşsa modal Google'ın `sorry`/captcha/challenge veya hata sayfası döndürmüş olabileceğini açıkça göstermelidir.
+- Aday adres modalında kayıtlar page ascending sıralanmalıdır; page 1 adayları üstte, son sayfa adayları altta görünmelidir.
+- Task silme hard delete davranışıdır. Task MongoDB'den kaldırılmalı, bekleyen BullMQ job'ları temizlenmeli ve `task.deleted` event'i yayınlanmalıdır.
 - HTML sayfası gerekiyorsa `public/*.html` yazma; `views/` altında EJS view oluştur ve controller üzerinden render et.
 - View tek büyük dosya olmamalı. Shell için `views/layouts/`, tekrar eden parçalar için `views/partials/`, sayfa içeriği için kaynak bazlı klasörler ve küçük UI parçaları için `components/` kullan.
 - Async controller hataları `app/Http/Middleware/asyncHandler.js` ile yakalanmalı.
@@ -93,7 +103,7 @@ Google arama URL davranışında BrightData'nın Google Search URL Parameters re
 - Referans: `https://brightdata.com/blog/web-data/google-search-url-parameters`
 - Google query üretimi tek yerde yapılmalıdır: `app/Automation/googleSearchUrl.js`.
 - Arama URL'sinde `q` ana parametredir ve URL builder içinde önce set edilmelidir.
-- Pagination için `start` kullanılmalıdır: `start=0` ilk sayfa, `start=10` ikinci sayfa, `start=20` üçüncü sayfa.
+- Pagination için sadece URL `start` parametresi kullanılmalıdır: `start=0` ilk sayfa, `start=10` ikinci sayfa, `start=20` üçüncü sayfa. Google "Next/Sonraki" linkine tıklanmaz; bazı SERP varyasyonlarında bu query'yi arama önerisine çevirebilir.
 - `num` parametresi kullanılmamalıdır; 2025 sonrası güvenilir değildir ve Google tarafından yok sayılabilir.
 - `pws` opsiyoneldir. Normal kullanıcı SERP'ine yakın davranmak için varsayılan boş kalmalıdır; kişiselleştirmeyi azaltmak veya rank-tracking yapmak için config ile `GOOGLE_SEARCH_PWS=0` verilir.
 - `udm` opsiyoneldir. Kullanıcının normal Google "All" sonuçlarına yakın davranmak için varsayılan boş kalmalıdır; klasik web/AI'sız SERP istenirse config ile `GOOGLE_SEARCH_UDM=14` verilir.
@@ -101,7 +111,16 @@ Google arama URL davranışında BrightData'nın Google Search URL Parameters re
 - Varsayılan Türkiye akışı `hl=tr`, `gl=tr` ile çalışır.
 - Google ccTLD üzerinden lokasyon varsayımı yapılmamalıdır; lokasyon davranışı `gl` ve gerekirse browser/proxy geo ayarları ile yönetilmelidir.
 - `ei`, `ved`, `sxsrf`, `sstk` gibi session/tracking parametreleri kod tarafından üretilmemelidir.
-- Sonuçlar lokasyon, personalization, proxy, browser state ve Google varyasyonları nedeniyle kullanıcının manuel tarayıcısından farklı olabilir; bu yüzden her sayfa kontrolü ve match/not_found sonucu loglanmalıdır.
+- Sonuçlar lokasyon, personalization, proxy, browser state ve Google varyasyonları nedeniyle kullanıcının manuel tarayıcısından farklı olabilir; bu yüzden her sayfa kontrolü, candidate list, match/not_found ve `google.com/sorry` gibi challenge URL'leri loglanmalıdır.
+- Google'a gitmeden önce geçersiz hedef domainleri ziyaret etmek `chrome-error://chromewebdata` navigation yarışına sebep olabilir; bu yüzden hedef preflight yasaktır.
+- Google `/sorry`/captcha/challenge döndürürse run `blocked_by_google` olarak ayrıştırılmalıdır; bu durum `not_found` ile karıştırılmamalıdır.
+
+## Local Visible Browser Kuralları
+
+- Docker'sız görünür test için `./start.sh` kullanılır.
+- Script local Redis ve MongoDB kapalıysa Homebrew services ile başlatmayı denemelidir.
+- `./start.sh` app ve worker'ı beraber başlatır; `HEADLESS_DEFAULT=false`, `MAX_PARALLEL_BROWSERS=1` ve UI portu varsayılan `3100` olmalıdır.
+- Headless false browser akışı fullscreen/maximized açılmalıdır. Bu davranış sadece `app/Automation/cloakBrowserClient.js` sınırında yönetilmelidir.
 
 ## Doğrulama
 

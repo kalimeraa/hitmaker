@@ -24,6 +24,7 @@ async function findResultLink(page, target) {
     }
 
     const links = Array.from(document.querySelectorAll("a[href]"));
+    let rank = 0;
     for (const link of links) {
       const href = link.href;
       if (!href || href.includes("/search?")) continue;
@@ -34,11 +35,13 @@ async function findResultLink(page, target) {
 
         const parsed = new URL(resolvedHref);
         const normalizedHost = parsed.hostname.replace(/^www\./, "").toLowerCase();
+        if (normalizedHost.includes("google.")) continue;
+        rank += 1;
         const hostMatches = normalizedHost === searchTarget.host || normalizedHost.endsWith(`.${searchTarget.host}`);
         const pathMatches = !searchTarget.hasPath || normalizePath(parsed.pathname) === searchTarget.path;
         if (hostMatches && pathMatches) {
           link.scrollIntoView({ block: "center", inline: "center" });
-          return resolvedHref;
+          return { href: resolvedHref, rank };
         }
       } catch (error) {
         continue;
@@ -86,6 +89,7 @@ async function collectResultCandidates(page, limit = 12) {
 
         seen.add(resolvedHref);
         candidates.push({
+          rank: candidates.length + 1,
           host,
           path: parsed.pathname,
           href: resolvedHref,
@@ -101,8 +105,8 @@ async function collectResultCandidates(page, limit = 12) {
 }
 
 async function findResultLinkAfterScroll(page, target) {
-  let matchedUrl = await retryOnDestroyedContext(() => findResultLink(page, target));
-  if (matchedUrl) return matchedUrl;
+  let match = await retryOnDestroyedContext(() => findResultLink(page, target));
+  if (match) return match;
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(1000);
@@ -122,24 +126,20 @@ async function retryOnDestroyedContext(action) {
   }
 }
 
-async function goToNextResultPage(page, onEvent) {
-  const nextLocators = [
-    page.locator("a#pnnext").first(),
-    page.getByRole("link", { name: /^(next|sonraki)$/i }).first()
-  ];
-
-  for (const locator of nextLocators) {
-    if (await locator.isVisible({ timeout: 1000 }).catch(() => false)) {
-      onEvent("google_results_next_clicked", { url: page.url() });
-      const previousUrl = page.url();
-      await locator.click();
-      await page.waitForLoadState("domcontentloaded").catch(() => {});
-      await page.waitForFunction((url) => window.location.href !== url, previousUrl, { timeout: 5000 }).catch(() => {});
-      await page.waitForTimeout(500);
-      return true;
-    }
+function isGoogleChallengeUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.includes("google.") && (
+      parsed.pathname.includes("/sorry") ||
+      parsed.pathname.includes("/sorry/") ||
+      parsed.searchParams.has("captcha")
+    );
+  } catch (error) {
+    return false;
   }
+}
 
+async function goToNextResultPage(page, onEvent) {
   return goToNextResultPageByStartParam(page, onEvent);
 }
 
@@ -154,7 +154,7 @@ async function goToNextResultPageByStartParam(page, onEvent) {
 
     const currentStart = Number(parsed.searchParams.get("start") || 0);
     parsed.searchParams.set("start", String(currentStart + 10));
-    onEvent("google_results_next_start_param", {
+    await onEvent("google_results_next_start_param", {
       fromStart: currentStart,
       toStart: currentStart + 10,
       url: parsed.toString()
@@ -166,26 +166,32 @@ async function goToNextResultPageByStartParam(page, onEvent) {
   }
 }
 
-function noop() {}
+async function noop() {}
 
 async function findResultAcrossPages(page, target, maxPages, onEvent = noop) {
   for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
-    onEvent("google_results_page_check_started", {
+    await onEvent("google_results_page_check_started", {
       pageNumber,
       url: page.url(),
       targetHost: target.host,
       targetPath: target.path
     });
 
-    const matchedUrl = await findResultLinkAfterScroll(page, target);
-    if (matchedUrl) {
-      onEvent("google_results_match_found", { pageNumber, matchedUrl });
-      return { matchedUrl, resultPage: pageNumber };
+    if (isGoogleChallengeUrl(page.url())) {
+      await onEvent("google_results_blocked_by_google", { pageNumber, url: page.url() });
+      await onEvent("google_results_candidates_seen", { pageNumber, candidates: [] });
+      return { matchedUrl: null, resultPage: pageNumber, blockedByGoogle: true };
+    }
+
+    const match = await findResultLinkAfterScroll(page, target);
+    if (match) {
+      await onEvent("google_results_match_found", { pageNumber, matchedUrl: match.href, resultRank: match.rank });
+      return { matchedUrl: match.href, resultPage: pageNumber, resultRank: match.rank };
     }
 
     const candidates = await retryOnDestroyedContext(() => collectResultCandidates(page));
-    onEvent("google_results_candidates_seen", { pageNumber, candidates });
-    onEvent("google_results_match_not_found", { pageNumber });
+    await onEvent("google_results_candidates_seen", { pageNumber, candidates });
+    await onEvent("google_results_match_not_found", { pageNumber });
 
     if (pageNumber === maxPages || !(await goToNextResultPage(page, onEvent))) {
       return { matchedUrl: null, resultPage: pageNumber };

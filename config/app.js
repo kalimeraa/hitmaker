@@ -7,6 +7,7 @@ function optionalBoolean(value) {
 
 module.exports = {
   port: Number(process.env.PORT || 3000),
+  headlessDefault: optionalBoolean(process.env.HEADLESS_DEFAULT) ?? true,
   mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/hitmaker",
   redis: {
     host: process.env.REDIS_HOST || "localhost",

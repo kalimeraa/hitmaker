@@ -6,3 +6,71 @@
   <div id="tasks" class="tasks"></div>
   <div id="taskPager" class="mt-3"></div>
 </div>
+
+<div class="modal fade" id="candidateModal" tabindex="-1" aria-labelledby="candidateModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="candidateModalTitle">Bulunan adresler</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body" id="candidateModalBody"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="taskEditModal" tabindex="-1" aria-labelledby="taskEditModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="taskEditForm">
+        <div class="modal-header">
+          <h2 class="modal-title fs-5" id="taskEditModalTitle">Task düzenle</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editTaskId">
+          <div class="vstack gap-3">
+            <div>
+              <label for="editKeywords" class="form-label">Keywordler</label>
+              <textarea class="form-control" id="editKeywords" rows="4"></textarea>
+            </div>
+            <div>
+              <label for="editTargetAddress" class="form-label">Targeted site</label>
+              <input class="form-control" id="editTargetAddress">
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="editCount" class="form-label">Click sayısı</label>
+                <input class="form-control" id="editCount" type="number" min="1" max="50">
+              </div>
+              <div class="col-md-4">
+                <label for="editDurationHours" class="form-label">Süre (saat)</label>
+                <input class="form-control" id="editDurationHours" type="number" min="0" max="720" step="0.01">
+              </div>
+              <div class="col-md-4">
+                <label for="editMaxAttempts" class="form-label">Retry</label>
+                <input class="form-control" id="editMaxAttempts" type="number" min="1" max="10">
+              </div>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="editHeadless">
+              <label class="form-check-label" for="editHeadless">Headless</label>
+            </div>
+            <div>
+              <label for="editProxyUrl" class="form-label">Proxy</label>
+              <input class="form-control" id="editProxyUrl">
+            </div>
+            <div>
+              <label for="editCookies" class="form-label">Cookie</label>
+              <textarea class="form-control" id="editCookies" rows="4"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+          <button type="submit" class="btn btn-primary" id="taskEditSaveBtn">Kaydet ve yeniden başlat</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

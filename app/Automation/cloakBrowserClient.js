@@ -12,16 +12,20 @@ async function loadCloakBrowser() {
 }
 
 function buildLaunchOptions({ headless, proxyUrl }) {
+  const args = headless
+    ? DEFAULT_CHROMIUM_ARGS
+    : [...DEFAULT_CHROMIUM_ARGS, "--start-maximized"];
+
   return {
     headless,
     proxy: proxyUrl || undefined,
-    args: DEFAULT_CHROMIUM_ARGS,
+    args,
     locale: cloakBrowser.locale,
     timezone: cloakBrowser.timezone,
     geoip: cloakBrowser.geoip && Boolean(proxyUrl),
     humanize: cloakBrowser.humanize,
     humanPreset: cloakBrowser.humanPreset,
-    viewport: DEFAULT_VIEWPORT
+    viewport: headless ? DEFAULT_VIEWPORT : null
   };
 }
 

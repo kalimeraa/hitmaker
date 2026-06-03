@@ -1,17 +1,108 @@
 # Claude Instructions
 
-Bu projede Claude/agent oturumları için geçerli kalıcı kurallar `AGENTS.md` içindedir.
+Bu dosya Hitmaker projesinde Claude/agent oturumları için kalıcı çalışma kurallarıdır. Ana kaynak `AGENTS.md` dosyasıdır; burada yazanlar onun operasyonel özetidir. Kullanıcı tekrar söylemese bile her yeni kod bu kurallara göre yazılır.
 
-Claude bu repoda çalışırken kullanıcı tekrar söylemese bile aşağıdaki dosyayı esas almalıdır:
+## Proje Özeti
 
-- `AGENTS.md`
+- Node.js + Express + EJS web/API uygulaması.
+- MongoDB task/log kalıcılığı için kullanılır.
+- Redis + BullMQ worker kuyruğu için kullanılır.
+- CloakBrowser Playwright uyumlu browser context sağlar.
+- UI reactive çalışır ve `/api/events` SSE stream'i ile canlı güncellenir.
 
-Özet kural: Her kod Laravel benzeri Model-View-Controller yapısına ve SOLID prensiplerine uygun yazılır. HTTP controller ve middleware dosyaları `app/Http/` altında, modeller `app/Models/` altında, servisler `app/Services/` altında tutulur. View katmanı EJS ile `views/` altında layout, partial, page ve component olarak modüler tutulur. `public/` sadece statik asset içindir.
+## MVC ve Katman Kuralları
 
-Tüm önemli task, worker, browser, pagination, proxy, click, hata ve cancellation aksiyonları logger ile kaydedilmelidir.
+- HTTP controller dosyaları `app/Http/Controllers` altında kalır.
+- Middleware dosyaları `app/Http/Middleware` altında kalır.
+- Modeller `app/Models` altında Mongoose schema olarak kalır.
+- Repository dosyaları `app/Repositories` altında sadece data access yapar.
+- Service dosyaları `app/Services` altında use-case orchestration yapar.
+- Domain kararları `app/Domain` altında saf fonksiyon/modül olarak tutulur.
+- Browser automation `app/Automation` altında izole edilir.
+- Hedef sayfaya gidildikten sonra doğal bekleme ve aşağı/yukarı scroll yapılır; browser hemen kapatılmaz.
+- View katmanı `views` altında layout, partial, page ve component olarak modüler tutulur.
+- `public` sadece browser JS/CSS asset içindir.
 
-Google Search URL üretimi ve pagination kuralları `AGENTS.md` içindeki "Google Search URL Kuralları" bölümüne göre uygulanır. Query builder `app/Automation/googleSearchUrl.js` içinde kalmalı; pagination `start=10`, `start=20` şeklinde yapılmalı; `num` kullanılmamalıdır.
+Controller'a iş kuralı, repository'ye workflow, model'e queue/browser logic yazılmaz.
 
-UI reactive çalışmalıdır. Task/log/error değişimleri Redis pub/sub ve `/api/events` SSE stream'i ile anlık akmalı; polling veya manuel yenileme ana akış olmamalıdır. Task listesi ve task içindeki run listeleri 10'lu pagination ile gösterilir.
+## SOLID Kuralları
 
-Başarısız run retry işlemi run seviyesinde yapılır; task'ın tamamı yeniden oluşturulmaz.
+- Her dosyanın tek değişme sebebi olmalıdır.
+- Yeni davranış mevcut sınırlara uygun service/domain/automation modülüyle eklenmelidir.
+- Queue, browser, realtime event ve repository sınırları birbirine karıştırılmamalıdır.
+- Geniş dependency objeleri yerine ihtiyaç duyulan dar bağımlılıklar kullanılmalıdır.
+- Yeni route sadece controller method'una bağlanmalı; route dosyasında iş kuralı yazılmamalıdır.
+
+## UI Kuralları
+
+- UI polling veya manuel refresh'e bağımlı olmamalıdır.
+- Task, run, log ve error değişimleri `app/Services/realtimeEventService.js` üzerinden Redis pub/sub ile yayınlanır.
+- Browser `/api/events` SSE stream'ini dinler.
+- Task listesi 10'lu pagination ile gösterilir.
+- Her task içindeki run listesi 10'lu pagination ile gösterilir.
+- Canlı update geldiğinde mevcut pagination state korunmalıdır.
+- Başarısız runlarda `Retry` butonu görünür.
+- Retry sadece ilgili run'ı tekrar çalıştırır; task'ın tüm run listesi yeniden oluşturulmaz.
+- Task kartında `Düzenle` butonu bulunur. Edit aynı task ID'sini korur, run listesini sıfırlar ve task'ı yeni parametrelerle yeniden kuyruğa alır.
+- `Sil` hard delete yapar; task MongoDB'den kaldırılır ve bekleyen job'lar temizlenir.
+
+## Task Davranışı
+
+- Task payload için yeni alan `clickCount`; eski `count` geriye uyumluluk içindir.
+- `durationHours`, clickleri belirtilen saat aralığına random dağıtır.
+- Run status değerleri: `queued`, `running`, `clicked`, `not_found`, `failed`.
+- Task status değerleri: `queued`, `running`, `completed`, `failed`, eski kayıtlarda `cancelled`.
+- Run retry progress'i ikinci kez artırmamalıdır.
+- Run otomatik retry `maxAttempts` ile yönetilir; varsayılan değer 3'tür.
+- Task edit `runVersion` artırır ve aktif eski run'ları cancellation path'iyle durdurur.
+- Match bulunduğunda `resultPage` ve `resultRank` kaydedilir.
+- Aktif run silinen taskı ilk cancellation kontrolünde durdurmalıdır.
+
+## Google Search Kuralları
+
+- Google URL üretimi sadece `app/Automation/googleSearchUrl.js` içinde yapılır.
+- BrightData referansı dikkate alınır: `https://brightdata.com/blog/web-data/google-search-url-parameters`
+- Varsayılan query `q=<keyword>&hl=tr&gl=tr`.
+- Pagination `start=10`, `start=20` ile yapılır.
+- `num` kullanılmaz.
+- `pws=0` ve `udm=14` varsayılan değildir; sadece env ile istenirse eklenir.
+- `ei`, `ved`, `sxsrf`, `sstk` gibi tracking/session parametreleri üretilmez.
+- Cookie uygulamak için hedefe ön navigation yapılmaz; cookie varsa Playwright context'e domain bazlı eklenir.
+- Google SERP kullanıcı tarayıcısından farklı olabilir. Bu yüzden `google_results_candidates_seen`, match ve not_found logları korunmalıdır.
+
+## Loglama Kuralları
+
+Her önemli aksiyon loglanır:
+
+- HTTP request
+- Task create/delete
+- Queue enqueue/completed/failed
+- Run start/completed/failed/retry
+- Browser context start
+- Cookie apply
+- Google navigation/page check/candidates
+- Match/not_found
+- Found page/rank
+- Target navigation
+- Target human scroll
+- Proxy/network/browser errors
+
+Loglar console'a ve MongoDB `logentries` collection'ına yazılır. Ayrıca `log.created` event'iyle UI'a canlı akar.
+
+## Doğrulama
+
+Kod değişikliğinden sonra:
+
+```bash
+find . -path './node_modules' -prune -o -path './.git' -prune -o -name '*.js' -print0 | xargs -0 -n 1 node --check
+docker compose config --quiet
+```
+
+Docker doğrulama:
+
+```bash
+docker compose up --build -d --force-recreate
+curl -sS http://127.0.0.1:3100/api/health
+```
+
+Browser/worker değişikliğinde gerçek task açıp `/api/tasks/<id>` ve worker logları kontrol edilmelidir. UI değişikliğinde `http://localhost:3100` üzerinde canlı update, pagination, retry, delete ve log stream davranışı doğrulanmalıdır.

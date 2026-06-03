@@ -132,6 +132,10 @@ h2 {
   min-width: 54px;
 }
 
+.run-candidate-btn {
+  min-width: 68px;
+}
+
 .run-row a {
   overflow-wrap: anywhere;
 }
@@ -222,6 +226,51 @@ h2 {
   font-size: 1.35rem;
 }
 
+.candidate-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.candidate-summary span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  padding: 4px 10px;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.4fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.candidate-host {
+  font-weight: 700;
+}
+
+.candidate-text {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  margin-top: 3px;
+}
+
+.candidate-row a {
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 100%);
@@ -238,6 +287,10 @@ h2 {
   }
 
   .error-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .candidate-row {
     grid-template-columns: 1fr;
   }
 }

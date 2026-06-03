@@ -2,6 +2,7 @@ const taskRepository = require("../Repositories/taskRepository");
 const taskCancellationService = require("./taskCancellationService");
 const taskJobService = require("./taskJobService");
 const realtimeEventService = require("./realtimeEventService");
+const { logger } = require("./logService");
 const { validateCreateTaskPayload } = require("../Validators/taskValidator");
 
 class TaskService {
@@ -27,8 +28,21 @@ class TaskService {
     });
 
     const job = await this.jobService.enqueueTask(task._id);
+    logger.info("task_created", { taskId: String(task._id), targetAddress: task.targetAddress, count: task.count });
     await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "created" });
 
+    return { ...task.toObject(), jobId: job.id };
+  }
+
+  async updateTask(taskId, payload) {
+    const taskPayload = validateCreateTaskPayload(payload);
+    const task = await this.repository.updateAndReset(taskId, taskPayload);
+    if (!task) return null;
+
+    await this.jobService.removeTaskJobs(taskId);
+    const job = await this.jobService.enqueueTask(task._id);
+    logger.info("task_updated", { taskId: String(task._id), targetAddress: task.targetAddress, count: task.count, maxAttempts: task.maxAttempts });
+    await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "updated" });
     return { ...task.toObject(), jobId: job.id };
   }
 
@@ -45,6 +59,7 @@ class TaskService {
 
     await this.repository.prepareRunRetry(taskId, index);
     const job = await this.jobService.enqueueRunRetry(taskId, index);
+    logger.info("run_retry_queued", { taskId: String(taskId), runIndex: index });
     await realtimeEventService.publish("task.updated", { taskId: String(taskId), action: "run_retry_queued", runIndex: index });
     return { taskId: String(taskId), runIndex: index, jobId: job.id };
   }

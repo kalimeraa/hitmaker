@@ -20,7 +20,9 @@ function buildQueuedRuns(keywords, count, options = {}) {
 
   return expandKeywords(keywords, count).map((keyword, index) => ({
     keyword,
+    attempts: 0,
     status: "queued",
+    candidates: [],
     scheduledAt: calculateScheduledAt(startsAt, durationHours, count, index)
   }));
 }

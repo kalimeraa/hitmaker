@@ -17,6 +17,19 @@ class TaskRepository {
     return Task.create(payload);
   }
 
+  updateAndReset(taskId, payload) {
+    return Task.findByIdAndUpdate(taskId, {
+      $set: {
+        ...payload,
+        status: "queued",
+        progress: 0,
+        runs: [],
+        error: ""
+      },
+      $inc: { runVersion: 1 }
+    }, { new: true });
+  }
+
   startProcessing(taskId, runs) {
     return Task.updateOne({ _id: taskId }, {
       $set: {
@@ -36,10 +49,39 @@ class TaskRepository {
     return Task.updateOne({ _id: taskId }, { $set: set });
   }
 
+  startRunAttempt(taskId, runIndex) {
+    return Task.updateOne({ _id: taskId }, {
+      $set: {
+        [`runs.${runIndex}.status`]: "running",
+        [`runs.${runIndex}.startedAt`]: new Date()
+      },
+      $unset: {
+        [`runs.${runIndex}.error`]: ""
+      },
+      $inc: {
+        [`runs.${runIndex}.attempts`]: 1
+      }
+    });
+  }
+
+  appendRunCandidates(taskId, runIndex, candidates) {
+    if (!candidates.length) return Promise.resolve();
+
+    return Task.updateOne({ _id: taskId }, {
+      $push: {
+        [`runs.${runIndex}.candidates`]: {
+          $each: candidates,
+          $slice: -120
+        }
+      }
+    });
+  }
+
   prepareRunRetry(taskId, runIndex) {
     return Task.updateOne({ _id: taskId }, {
       $set: {
         status: "running",
+        [`runs.${runIndex}.attempts`]: 0,
         [`runs.${runIndex}.status`]: "queued",
         [`runs.${runIndex}.scheduledAt`]: new Date()
       },
@@ -47,7 +89,12 @@ class TaskRepository {
         error: "",
         [`runs.${runIndex}.matchedUrl`]: "",
         [`runs.${runIndex}.resultPage`]: "",
+        [`runs.${runIndex}.resultRank`]: "",
         [`runs.${runIndex}.error`]: "",
+        [`runs.${runIndex}.searchUrl`]: "",
+        [`runs.${runIndex}.lastGoogleUrl`]: "",
+        [`runs.${runIndex}.googleBlocked`]: "",
+        [`runs.${runIndex}.candidates`]: "",
         [`runs.${runIndex}.startedAt`]: "",
         [`runs.${runIndex}.finishedAt`]: ""
       }
