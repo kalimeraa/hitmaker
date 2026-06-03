@@ -1,0 +1,15 @@
+<div class="tab-pane fade" id="logsPane">
+  <div class="toolbar">
+    <h2>Loglar</h2>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" id="logLevel">
+        <option value="">all</option>
+        <option value="error">error</option>
+        <option value="warn">warn</option>
+        <option value="info">info</option>
+      </select>
+      <button class="btn btn-outline-secondary btn-sm" id="refreshLogsBtn">Yenile</button>
+    </div>
+  </div>
+  <div id="logs" class="log-viewer"></div>
+</div>

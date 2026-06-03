@@ -1,12 +1,13 @@
 # Hitmaker
 
-Node.js tabanlı task runner. Express API task oluşturur, BullMQ işi Redis kuyruğuna alır, worker her koşuyu MongoDB'ye kaydeder ve browser otomasyonunu Playwright API'si üzerinden CloakBrowser ile çalıştırır.
+Node.js tabanlı task runner. Express web route'ları EJS view render eder, API route'ları task oluşturur, BullMQ işi Redis kuyruğuna alır, worker her koşuyu MongoDB'ye kaydeder ve browser otomasyonunu Playwright API'si üzerinden CloakBrowser ile çalıştırır.
 
 ## Mimari
 
-- `app.js` Express uygulamasını kurar; statik UI, `/api` route'ları ve hata middleware'i burada bağlanır.
-- `routes/` HTTP endpoint'lerini kaynak bazlı router'lara ayırır: task, log, error ve system route'ları.
-- `controllers/` request/response sınırıdır; iş kuralı içermez.
+- `app.js` Express uygulamasını kurar; EJS view engine, static asset servisleri, web route'ları, `/api` route'ları ve hata middleware'i burada bağlanır.
+- `routes/` HTTP endpoint'lerini kaynak bazlı router'lara ayırır: web, task, log, error ve system route'ları.
+- `controllers/` request/response sınırıdır; iş kuralı içermez. API controller'ları JSON döner, web controller'ları view render eder.
+- `views/` server-rendered EJS view katmanıdır. Layout, partial, page ve component olarak modüler tutulur.
 - `validators/` gelen task payload'ını normalize eder: keyword, hedef domain, proxy ve cookie formatı.
 - `domain/` saf domain kararlarını tutar; run planlama ve final status hesabı burada yapılır.
 - `services/taskService.js` task oluşturma/listeleme use-case'lerini yönetir.

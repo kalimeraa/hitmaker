@@ -1,0 +1,16 @@
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tasksPane" type="button">Tasklar</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#logsPane" type="button">Loglar</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#errorsPane" type="button">Hatalar</button>
+  </li>
+</ul>
+<div class="tab-content">
+  <%- include("taskTabPane") %>
+  <%- include("logTabPane") %>
+  <%- include("errorTabPane") %>
+</div>

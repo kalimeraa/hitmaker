@@ -17,6 +17,7 @@
     "bullmq": "^5.56.0",
     "cloakbrowser": "^0.3.31",
     "dotenv": "^16.4.7",
+    "ejs": "^6.0.1",
     "express": "^4.21.2",
     "ioredis": "^5.6.1",
     "mmdb-lib": "^3.0.2",
