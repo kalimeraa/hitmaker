@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hitmaker Task Runner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/style.css" rel="stylesheet">
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg bg-body border-bottom">
+      <div class="container-fluid">
+        <span class="navbar-brand fw-semibold">Hitmaker</span>
+        <span class="badge text-bg-secondary" id="healthBadge">checking</span>
+      </div>
+    </nav>
+
+    <main class="container-fluid py-4">
+      <div class="row g-4">
+        <section class="col-12 col-xl-4">
+          <div class="panel">
+            <div class="panel-header">
+              <h1>Yeni task</h1>
+            </div>
+            <form id="taskForm" class="vstack gap-3">
+              <div>
+                <label for="keywords" class="form-label">Keywordler</label>
+                <textarea class="form-control" id="keywords" rows="6" placeholder="facebook&#10;instagram login"></textarea>
+              </div>
+
+              <div>
+                <label for="targetAddress" class="form-label">Targeted site</label>
+                <input class="form-control" id="targetAddress" placeholder="facebook.com">
+              </div>
+
+              <div class="row g-3 align-items-end">
+                <div class="col-6">
+                  <label for="count" class="form-label">Browser sayısı</label>
+                  <input class="form-control" id="count" type="number" min="1" max="50" value="10">
+                </div>
+                <div class="col-6">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="headless" checked>
+                    <label class="form-check-label" for="headless">Headless</label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label for="proxyUrl" class="form-label">Proxy</label>
+                <input class="form-control" id="proxyUrl" placeholder="http://user:pass@host:port">
+              </div>
+
+              <div>
+                <label for="cookies" class="form-label">Cookie</label>
+                <textarea class="form-control" id="cookies" rows="5" placeholder="sessionid=abc123&#10;veya JSON cookie array"></textarea>
+              </div>
+
+              <div class="alert alert-secondary small mb-0">
+                Sadece yetkili olduğun siteler ve test amaçlı aramalar için kullan.
+              </div>
+
+              <button class="btn btn-primary btn-lg" type="submit" id="createTaskBtn">
+                Task aç
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <section class="col-12 col-xl-8">
+          <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tasksPane" type="button">Tasklar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#logsPane" type="button">Loglar</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#errorsPane" type="button">Hatalar</button>
+            </li>
+          </ul>
+          <div class="tab-content">
+            <div class="tab-pane fade show active" id="tasksPane">
+              <div class="toolbar">
+                <h2>Tasklar</h2>
+                <button class="btn btn-outline-secondary btn-sm" id="refreshBtn">Yenile</button>
+              </div>
+              <div id="tasks" class="tasks"></div>
+            </div>
+            <div class="tab-pane fade" id="logsPane">
+              <div class="toolbar">
+                <h2>Loglar</h2>
+                <div class="d-flex gap-2">
+                  <select class="form-select form-select-sm" id="logLevel">
+                    <option value="">all</option>
+                    <option value="error">error</option>
+                    <option value="warn">warn</option>
+                    <option value="info">info</option>
+                  </select>
+                  <button class="btn btn-outline-secondary btn-sm" id="refreshLogsBtn">Yenile</button>
+                </div>
+              </div>
+              <div id="logs" class="log-viewer"></div>
+            </div>
+            <div class="tab-pane fade" id="errorsPane">
+              <div class="toolbar">
+                <h2>Sistem hataları</h2>
+                <button class="btn btn-outline-danger btn-sm" id="refreshErrorsBtn">Yenile</button>
+              </div>
+              <div class="error-summary mb-3" id="errorSummary"></div>
+              <div id="errors" class="log-viewer"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

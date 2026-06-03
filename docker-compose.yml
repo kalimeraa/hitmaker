@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+    platform: linux/amd64
+    command: npm start
+    tmpfs:
+      - /tmp:size=512m
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      MONGODB_URI: mongodb://mongo:27017/hitmaker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_NAME: browser-tasks
+      MAX_PARALLEL_BROWSERS: 4
+      TASK_TIMEOUT_MS: 120000
+    depends_on:
+      - redis
+      - mongo
+
+  worker:
+    build: .
+    platform: linux/amd64
+    command: npm run worker
+    tmpfs:
+      - /tmp:size=512m
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/hitmaker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_NAME: browser-tasks
+      MAX_PARALLEL_BROWSERS: 4
+      TASK_TIMEOUT_MS: 120000
+    depends_on:
+      - redis
+      - mongo
+
+  redis:
+    image: redis:7-alpine
+
+  mongo:
+    image: mongo:7
+    tmpfs:
+      - /data/db:size=512m
