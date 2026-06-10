@@ -45,6 +45,102 @@ function parseMaxAttempts(value) {
   return maxAttempts;
 }
 
+function extractCookieText(value) {
+  const raw = String(value || "").trim();
+  const cookieOption = raw.match(/(?:^|\s)(?:-b|--cookie)\s+(['"])([\s\S]*?)\1/);
+  if (cookieOption) return cookieOption[2];
+
+  const cookieHeader = raw.match(/(?:^|\s)-H\s+(['"])cookie\s*:\s*([\s\S]*?)\1/i);
+  if (cookieHeader) return cookieHeader[2];
+
+  return raw;
+}
+
+function normalizeCookieInput(raw) {
+  return extractCookieText(raw)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => line.toLowerCase() !== "cookie")
+    .map((line) => line.replace(/^cookie\s*:\s*/i, ""))
+    .join("; ");
+}
+
+function cookieDomainForName(name, targetHost) {
+  if (/^(SID|HSID|SSID|APISID|SAPISID|NID|AEC|OTZ|UULE|SIDCC|SEARCH_SAMESITE)$/i.test(name)) {
+    return ".google.com";
+  }
+  if (/^__Secure-(1P|3P)?(SID|PSID|APISID|PAPISID|SIDTS|PSIDTS|SIDCC|PSIDCC|STRP)$/i.test(name)) {
+    return ".google.com";
+  }
+
+  return targetHost;
+}
+
+function parseNetscapeCookieLines(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("# ") && !line.startsWith("#\t"))
+    .filter((line) => !line.startsWith("# Netscape") && !line.startsWith("# https://") && !line.startsWith("# This is"))
+    .map((line) => {
+      const httpOnly = line.startsWith("#HttpOnly_");
+      const cleanLine = httpOnly ? line.replace(/^#HttpOnly_/, "") : line;
+      const parts = cleanLine.split(/\s+/);
+
+      if (parts.length < 7) {
+        throw new Error("Netscape cookie lines must have 7 fields");
+      }
+
+      const [domain, , path, secure, expires, name, ...valueParts] = parts;
+      return {
+        name,
+        value: valueParts.join("\t"),
+        domain,
+        path: path || "/",
+        expires: Number(expires) || undefined,
+        httpOnly,
+        secure: String(secure).toUpperCase() === "TRUE"
+      };
+    });
+}
+
+function isNetscapeCookieInput(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .some((line) => {
+      const cleanLine = line.trim().replace(/^#HttpOnly_/, "");
+      return cleanLine.split(/\s+/).length >= 7;
+    });
+}
+
+function parseCookieHeaderPairs(raw, targetHost) {
+  if (isNetscapeCookieInput(raw)) {
+    return parseNetscapeCookieLines(raw);
+  }
+
+  return normalizeCookieInput(raw)
+    .split(";")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const separator = line.indexOf("=");
+      if (separator <= 0) {
+        throw new Error("Cookie lines must use name=value format");
+      }
+
+      const name = line.slice(0, separator).trim();
+      return {
+        name,
+        value: line.slice(separator + 1).trim(),
+        domain: cookieDomainForName(name, targetHost),
+        path: "/",
+        secure: name.startsWith("__Secure-")
+      };
+    });
+}
+
 function parseCookies(value, targetAddress) {
   const raw = String(value || "").trim();
   if (!raw) return [];
@@ -57,21 +153,7 @@ function parseCookies(value, targetAddress) {
       const parsed = JSON.parse(raw);
       cookies = Array.isArray(parsed) ? parsed : [parsed];
     } else {
-      cookies = raw.split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const separator = line.indexOf("=");
-          if (separator <= 0) {
-            throw new Error("Cookie lines must use name=value format");
-          }
-          return {
-            name: line.slice(0, separator).trim(),
-            value: line.slice(separator + 1).trim(),
-            domain: targetHost,
-            path: "/"
-          };
-        });
+      cookies = parseCookieHeaderPairs(raw, targetHost);
     }
   } catch (error) {
     throw new HttpError(400, `Invalid cookies: ${error.message}`);

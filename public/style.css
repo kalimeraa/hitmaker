@@ -15,6 +15,40 @@ body {
   min-height: 58px;
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(13, 110, 253, 0.08), rgba(25, 135, 84, 0.08)),
+    var(--page-bg);
+}
+
+.login-panel {
+  width: min(100%, 380px);
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+}
+
+.login-brand {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);

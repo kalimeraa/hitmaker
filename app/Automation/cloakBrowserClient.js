@@ -30,8 +30,17 @@ function buildLaunchOptions({ headless, proxyUrl }) {
 }
 
 async function launchBrowserContext(options) {
-  const { launchContext } = await loadCloakBrowser();
-  return launchContext(buildLaunchOptions(options));
+  const { launchContext, launchPersistentContext } = await loadCloakBrowser();
+  const launchOptions = buildLaunchOptions(options);
+
+  if (cloakBrowser.persistentProfile) {
+    return launchPersistentContext({
+      ...launchOptions,
+      userDataDir: cloakBrowser.userDataDir
+    });
+  }
+
+  return launchContext(launchOptions);
 }
 
 module.exports = {

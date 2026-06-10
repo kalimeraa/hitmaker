@@ -2,8 +2,12 @@
 <html lang="tr">
   <%- include("../partials/head", { title }) %>
   <body>
-    <%- include("../partials/navbar") %>
+    <% const shouldShowNavbar = typeof showNavbar === "undefined" ? true : showNavbar; %>
+    <% const shouldLoadAppScript = typeof loadAppScript === "undefined" ? true : loadAppScript; %>
+    <% if (shouldShowNavbar !== false) { %>
+      <%- include("../partials/navbar") %>
+    <% } %>
     <%- include("../" + view) %>
-    <%- include("../partials/scripts") %>
+    <%- include("../partials/scripts", { loadAppScript: shouldLoadAppScript }) %>
   </body>
 </html>

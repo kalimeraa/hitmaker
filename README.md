@@ -8,6 +8,7 @@ Node.js tabanlı Google task runner. Express HTTP katmanı EJS view render eder,
 - Browser: CloakBrowser paketi üzerinden Playwright uyumlu `BrowserContext`.
 - UI: Server-rendered EJS + `public/app.js`.
 - Docker UI portu: `http://localhost:3100`.
+- Panel girişi varsayılan olarak `hitmaker` / `hitmaker34716` bilgileriyle korunur ve JWT token HttpOnly cookie olarak saklanır.
 - Container içi app portu: `3000`.
 - Redis ve MongoDB Docker Compose içinde host portu yayınlamaz; başka projelerdeki Redis/Mongo portlarıyla çakışmaz.
 - Task silme desteklenir. Silinen task MongoDB'den kaldırılır, bekleyen BullMQ job'ları kaldırılır ve aktif run ilk cancellation kontrolünde kapanır.
@@ -149,8 +150,12 @@ Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build 
 - `MONGODB_URI`: MongoDB bağlantısı.
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: Redis bağlantısı.
 - `QUEUE_NAME`: BullMQ queue adı.
+- `AUTH_USERNAME`: Panel kullanıcı adı. Varsayılan `hitmaker`.
+- `AUTH_PASSWORD`: Panel şifresi. Varsayılan `hitmaker34716`.
+- `AUTH_JWT_SECRET`: Panel JWT token imzası için secret.
+- `AUTH_JWT_TTL_SECONDS`: Panel JWT token geçerlilik süresi. Varsayılan `43200`.
 - `MAX_PARALLEL_BROWSERS`: Aynı job içinde kaç browser context paralel çalışacak.
-- `TASK_TIMEOUT_MS`: Sayfa aksiyonları için timeout.
+- `TASK_TIMEOUT_MS`: Sayfa aksiyonları için timeout. Maksimum `60000` ms olarak sınırlandırılır.
 - `GOOGLE_MAX_RESULT_PAGES`: Hedef domain bulunana kadar kaç Google sonuç sayfası gezileceği. Varsayılan `10`.
 - `GOOGLE_SEARCH_HL`: Google arama arayüz dili. Varsayılan `tr`.
 - `GOOGLE_SEARCH_GL`: Google arama ülke hedefi. Varsayılan `tr`.
@@ -161,6 +166,9 @@ Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build 
 - `CLOAKBROWSER_TIMEZONE`: CloakBrowser timezone ayarı. Örnek: `Europe/Istanbul`.
 - `CLOAKBROWSER_HUMANIZE`: `true` ise CloakBrowser humanize davranış katmanı etkinleşir.
 - `CLOAKBROWSER_HUMAN_PRESET`: `default` veya `careful`.
+- `CLOAKBROWSER_PERSISTENT_PROFILE`: `true` ise browser incognito context yerine kalıcı profil ile açılır. Varsayılan `true`.
+- `CLOAKBROWSER_USER_DATA_DIR`: Kalıcı browser profil dizini. Varsayılan proje içinde `storage/browser-profile`.
+- Kalıcı profil aynı anda tek browser tarafından kullanılmalıdır; normal profil davranışı için `MAX_PARALLEL_BROWSERS=1` önerilir.
 - `CLOAKBROWSER_BINARY_PATH`: İndirme yerine lokal binary kullanmak için CloakBrowser env değişkeni.
 - `CLOAKBROWSER_CACHE_DIR`: Binary cache dizini.
 - `CLOAKBROWSER_AUTO_UPDATE`: CloakBrowser auto-update kontrolü.
@@ -199,6 +207,8 @@ Alanlar:
 Her run tek progress birimidir. Ara retry'lar progress'i artırmaz; run ancak `clicked`, final `not_found` veya final `failed` sonucunda tamamlanmış sayılır. Manuel `Retry` aynı run index'ini sıfırlayıp tekrar `maxAttempts` kadar dener.
 
 ## API
+
+API endpoint'leri JWT ile korunur. Browser panelinde token HttpOnly cookie olarak saklanır; curl ile çağıracaksan `/login` üzerinden cookie alabilir veya `Authorization: Bearer <token>` header'ı gönderebilirsin.
 
 Task listele:
 

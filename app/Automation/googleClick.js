@@ -50,6 +50,32 @@ async function runCancellable(action, shouldCancel) {
   return Promise.race([action(), cancellation]).finally(() => clearInterval(intervalId));
 }
 
+async function navigateToTargetWithRetry(page, matchedUrl, onEvent, shouldCancel, attempts = 3) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await onEvent("target_navigation_attempt_started", { matchedUrl, attempt, attempts });
+      await runCancellable(() => page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
+      return;
+    } catch (error) {
+      lastError = error;
+      await onEvent("target_navigation_attempt_failed", {
+        matchedUrl,
+        attempt,
+        attempts,
+        error: error.message
+      });
+
+      if (attempt < attempts) {
+        await runCancellable(() => page.waitForTimeout(1200 + Math.floor(Math.random() * 1600)), shouldCancel);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 async function scrollTargetPageLikeHuman(page, onEvent, shouldCancel) {
   await onEvent("target_human_scroll_started", { url: page.url() });
   await runCancellable(() => page.waitForTimeout(1800 + Math.floor(Math.random() * 2200)), shouldCancel);
@@ -85,7 +111,12 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     await onEvent("browser_context_started", { keyword, targetAddress, target });
     await applyCookies(context, cookies, target.host);
     if ((cookies || []).length) {
-      await onEvent("browser_cookies_applied", { cookieCount: cookies.length, targetHost: target.host });
+      const googleCookies = await context.cookies("https://www.google.com").catch(() => []);
+      await onEvent("browser_cookies_applied", {
+        cookieCount: cookies.length,
+        googleCookieCount: googleCookies.length,
+        targetHost: target.host
+      });
     }
     await onEvent("google_search_navigation_started", { searchUrl });
     await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
@@ -102,7 +133,7 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     }
 
     await onEvent("target_navigation_started", { matchedUrl, resultPage, resultRank });
-    await runCancellable(() => page.goto(matchedUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
+    await navigateToTargetWithRetry(page, matchedUrl, onEvent, shouldCancel);
     await runCancellable(() => page.waitForTimeout(2000), shouldCancel);
     await scrollTargetPageLikeHuman(page, onEvent, shouldCancel);
     await onEvent("target_navigation_completed", { matchedUrl, resultPage, resultRank, finalUrl: page.url() });

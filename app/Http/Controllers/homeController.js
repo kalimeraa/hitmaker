@@ -5,6 +5,8 @@ class HomeController {
     res.render("layouts/main", {
       title: "Hitmaker Task Runner",
       view: "home/index",
+      showNavbar: true,
+      loadAppScript: true,
       headlessDefault
     });
   }
