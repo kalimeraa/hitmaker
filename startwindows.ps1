@@ -256,6 +256,16 @@ function Invoke-WindowsVerification {
 Ensure-CommandAvailable -CommandName "node.exe" -Label "Node.js LTS" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 Ensure-CommandAvailable -CommandName "npm.cmd" -Label "npm" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 
+$AppPort = [int](Get-EnvOrDefault -Name "PORT" -Default "3100")
+$MongoUri = Get-EnvOrDefault -Name "MONGODB_URI" -Default "mongodb://localhost:27017/hitmaker"
+$RedisHost = Get-EnvOrDefault -Name "REDIS_HOST" -Default "localhost"
+$RedisPort = [int](Get-EnvOrDefault -Name "REDIS_PORT" -Default "6379")
+$MongoHost = Get-EnvOrDefault -Name "MONGO_HOST" -Default "localhost"
+$MongoPort = [int](Get-EnvOrDefault -Name "MONGO_PORT" -Default "27017")
+$BrowserCacheDir = Join-Path $RootDir "storage\cloakbrowser"
+New-Item -ItemType Directory -Force -Path $BrowserCacheDir | Out-Null
+$env:CLOAKBROWSER_CACHE_DIR = Get-EnvOrDefault -Name "CLOAKBROWSER_CACHE_DIR" -Default $BrowserCacheDir
+
 if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
   if (-not $InstallDependencies) {
     throw "node_modules yok. Once npm install calistir. Otomatik kurulum icin: .\startwindows.ps1 -InstallDependencies"
@@ -276,13 +286,6 @@ if ($InstallDependencies) {
   }
 }
 
-$AppPort = [int](Get-EnvOrDefault -Name "PORT" -Default "3100")
-$MongoUri = Get-EnvOrDefault -Name "MONGODB_URI" -Default "mongodb://localhost:27017/hitmaker"
-$RedisHost = Get-EnvOrDefault -Name "REDIS_HOST" -Default "localhost"
-$RedisPort = [int](Get-EnvOrDefault -Name "REDIS_PORT" -Default "6379")
-$MongoHost = Get-EnvOrDefault -Name "MONGO_HOST" -Default "localhost"
-$MongoPort = [int](Get-EnvOrDefault -Name "MONGO_PORT" -Default "27017")
-
 Ensure-ServicePort -HostName $RedisHost -Port $RedisPort -Label "Redis/Memurai" -ServiceNames @("Redis", "Memurai") -WingetId "Memurai.MemuraiDeveloper" -ChocolateyPackage "memurai-developer"
 Ensure-ServicePort -HostName $MongoHost -Port $MongoPort -Label "MongoDB" -ServiceNames @("MongoDB", "MongoDB Server") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
 
@@ -298,6 +301,7 @@ $env:GOOGLE_SEARCH_GL = Get-EnvOrDefault -Name "GOOGLE_SEARCH_GL" -Default "tr"
 $env:CLOAKBROWSER_HUMANIZE = Get-EnvOrDefault -Name "CLOAKBROWSER_HUMANIZE" -Default "true"
 $env:CLOAKBROWSER_HUMAN_PRESET = Get-EnvOrDefault -Name "CLOAKBROWSER_HUMAN_PRESET" -Default "careful"
 $env:CLOAKBROWSER_AUTO_UPDATE = Get-EnvOrDefault -Name "CLOAKBROWSER_AUTO_UPDATE" -Default "false"
+$env:CLOAKBROWSER_CACHE_DIR = Get-EnvOrDefault -Name "CLOAKBROWSER_CACHE_DIR" -Default $BrowserCacheDir
 $env:REQUEST_BODY_LIMIT = Get-EnvOrDefault -Name "REQUEST_BODY_LIMIT" -Default "25mb"
 
 Write-Host "Hitmaker Windows local mode"

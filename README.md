@@ -126,7 +126,47 @@ Task formundaki `Aynı anda tarayıcı` alanı task bazlı concurrency belirler.
 
 ## Windows Server 2022 Local Run
 
-Windows Server 2022 üzerinde Docker Desktop destekli hedef değildir; native/WSL akışında app ve worker'ı beraber başlatmak için:
+Windows Server 2022 üzerinde önerilen kurulum Windows service installer akışıdır. Proje klasöründe Administrator PowerShell veya Administrator CMD açıp:
+
+```powershell
+.\setup-windows.ps1
+```
+
+CMD için:
+
+```bat
+setup-windows.cmd
+```
+
+Installer davranışı:
+
+- Administrator değilse kendini yükseltilmiş PowerShell olarak tekrar açar.
+- `winget`, başarısız olursa Chocolatey ile Node.js LTS, MongoDB, Memurai ve NSSM kurmayı dener.
+- `npm install` ve `npm run browser:install` çalıştırır.
+- CloakBrowser cache'ini service kullanabilsin diye `storage\cloakbrowser` altında tutar.
+- `Hitmaker Web` ve `Hitmaker Worker` Windows service'lerini kurar.
+- Servisleri otomatik başlatmaya ve reboot sonrası otomatik açılacak şekilde ayarlamaya çalışır.
+- Masaüstüne `Hitmaker Panel` kısayolu ekler.
+- Loglar `storage\logs\HitmakerWeb.*.log` ve `storage\logs\HitmakerWorker.*.log` dosyalarına yazılır.
+
+Servis yönetimi:
+
+```bat
+hitmaker-service.cmd status
+hitmaker-service.cmd restart
+hitmaker-service.cmd stop
+hitmaker-service.cmd start
+```
+
+Servisleri kaldırmak için:
+
+```bat
+uninstall-windows.cmd
+```
+
+MongoDB/Redis/Memurai ve proje dosyaları uninstall sırasında silinmez.
+
+Tek seferlik local çalıştırma istersen app ve worker'ı terminalden beraber başlatmak için:
 
 ```powershell
 .\startwindows.ps1
