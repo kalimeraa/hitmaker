@@ -156,24 +156,33 @@ Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build 
 
 ## Railway
 
-Railway Dockerfile deploy'unda `docker-compose.yml` kullanılmaz ve `.env` dosyası image içine kopyalanmaz. Container içinde Redis veya MongoDB otomatik başlamaz. Railway projesine ayrı Redis ve MongoDB servisleri eklenmeli, app servisinde bu servislerin bağlantı değişkenleri Railway Variables ekranından verilmelidir.
+Railway Dockerfile deploy'unda `docker-compose.yml` kullanılmaz ve `.env` dosyası image içine kopyalanmaz. Bu yüzden Railway akışı tek Docker image içinde çalışacak şekilde hazırlanmıştır: Dockerfile Redis Server ve MongoDB Server kurar, default `CMD` olarak `railway-start.sh` çalışır. Bu script aynı container içinde Redis, MongoDB, Express app ve worker süreçlerini beraber başlatır.
 
-Gerekli app değişkenleri:
+Railway için ayrı Redis/Mongo servisi zorunlu değildir. Varsayılan embedded bağlantılar:
 
 ```text
-MONGODB_URI=<Railway MongoDB connection string>
-REDIS_URL=<Railway Redis connection string>
+MONGODB_URI=mongodb://127.0.0.1:27017/hitmaker
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+```
+
+Railway Variables ekranında minimum önerilen değişkenler:
+
+```text
 QUEUE_NAME=browser-tasks
 HEADLESS_DEFAULT=true
 MAX_PARALLEL_BROWSERS=1
 CLOAKBROWSER_AUTO_UPDATE=false
+AUTH_USERNAME=hitmaker
+AUTH_PASSWORD=<strong-password>
+AUTH_JWT_SECRET=<long-random-secret>
 ```
 
-`REDIS_URL` verilirse `REDIS_HOST`, `REDIS_PORT` ve `REDIS_PASSWORD` yerine geçer. Railway Redis bağlantısı `redis://...` veya TLS gerekiyorsa `rediss://...` formatında olabilir. Railway Redis servisinde bağlantı `REDIS_PRIVATE_URL` veya `REDIS_PUBLIC_URL` olarak gelirse uygulama bunları da fallback olarak okur. `REDISHOST`, `REDISPORT`, `REDISUSER` ve `REDISPASSWORD` alias'ları da desteklenir.
+Railway Variables ekranında `MONGODB_URI=mongodb://mongo:27017/hitmaker` veya `REDIS_HOST=redis` kalırsa uygulama Railway runtime'da bunları embedded servisler için `127.0.0.1` olarak normalize eder. Yine de Railway için en temiz ayar bu değişkenleri hiç vermemek veya `127.0.0.1` değerlerini kullanmaktır.
 
-MongoDB bağlantısı için tercih edilen değişken `MONGODB_URI`'dir. Railway Mongo servisinde değişken adı `MONGO_URL` veya `MONGO_PRIVATE_URL` olarak gelirse uygulama bunları da fallback olarak okur. Deploy ortamında `mongodb://localhost:27017/hitmaker` kullanılmamalıdır; bu adres container'ın kendi içini gösterir.
+Veri kalıcılığı gerekiyorsa Railway'de container'a volume bağlanmalı ve path `/data` olmalıdır. MongoDB `/data/db`, Redis `/data/redis` altında yazar. Volume yoksa Railway redeploy/restart sonrası embedded Mongo/Redis verileri kaybolabilir.
 
-Worker ayrı bir Railway servis/process olarak çalışmalıdır. Web servis `npm start` ile Express uygulamasını, worker servis `npm run worker` ile BullMQ worker'ını çalıştırır. Sadece web container'ı deploy edilirse task oluşturulur ama queue job'ları işlenmez.
+Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `REDIS_PUBLIC_URL`, `REDISHOST`, `REDISPORT`, `REDISUSER`, `REDISPASSWORD`, `MONGODB_URI`, `MONGO_URL` ve `MONGO_PRIVATE_URL` alias'ları desteklenir.
 
 ## Ortam Değişkenleri
 

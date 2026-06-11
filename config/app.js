@@ -12,10 +12,16 @@ const configuredTaskTimeoutMs = Number(process.env.TASK_TIMEOUT_MS || maxTaskTim
 const isRailwayRuntime = Boolean(process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_PROJECT_ID);
 
 function buildMongoUri() {
-  return process.env.MONGODB_URI
+  const mongoUri = process.env.MONGODB_URI
     || process.env.MONGO_URL
     || process.env.MONGO_PRIVATE_URL
     || "mongodb://localhost:27017/hitmaker";
+
+  if (isRailwayRuntime && mongoUri.startsWith("mongodb://mongo:")) {
+    return mongoUri.replace("mongodb://mongo:", "mongodb://127.0.0.1:");
+  }
+
+  return mongoUri;
 }
 
 function buildRedisConfig() {
@@ -44,8 +50,8 @@ function buildRedisConfig() {
     maxRetriesPerRequest: null
   };
 
-  if (isRailwayRuntime && ["localhost", "127.0.0.1", "::1"].includes(redisConfig.host)) {
-    throw new Error("Railway Redis config missing. Set REDIS_URL or REDIS_PRIVATE_URL in Railway service variables.");
+  if (isRailwayRuntime && redisConfig.host === "redis") {
+    redisConfig.host = "127.0.0.1";
   }
 
   return redisConfig;
