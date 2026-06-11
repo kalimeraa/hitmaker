@@ -7,6 +7,7 @@ const runPageSize = 10;
 let taskPage = 1;
 let allTasks = [];
 let allCookies = [];
+let browserCapacity = null;
 const runPages = new Map();
 let pendingTaskLoad = null;
 let candidateModal = null;
@@ -24,6 +25,43 @@ function escapeHtml(value) {
 function cleanOptionalText(value) {
   const text = String(value || "").trim();
   return ["null", "undefined"].includes(text.toLowerCase()) ? "" : text;
+}
+
+function renderBrowserCapacityHint(scope) {
+  const $hint = $(`[data-browser-capacity-hint="${scope}"]`);
+  if (!browserCapacity) {
+    $hint.text("Tarayıcı kapasitesi hesaplanıyor...");
+    return;
+  }
+
+  $hint.text(
+    `Öneri: ${browserCapacity.recommended} · üst sınır: ${browserCapacity.maxAllowed} · CPU: ${browserCapacity.cpuCores} çekirdek · boş RAM: ${browserCapacity.freeMemoryMb} MB`
+  );
+}
+
+function applyBrowserCapacity(scope) {
+  if (!browserCapacity) return;
+  const selector = scope === "edit" ? "#editMaxConcurrentBrowsers" : "#maxConcurrentBrowsers";
+  $(selector)
+    .attr("max", browserCapacity.maxAllowed)
+    .val(browserCapacity.recommended);
+  renderBrowserCapacityHint(scope);
+}
+
+async function loadBrowserCapacity() {
+  try {
+    browserCapacity = await $.getJSON("/api/system/browser-capacity");
+    ["create", "edit"].forEach((scope) => {
+      const selector = scope === "edit" ? "#editMaxConcurrentBrowsers" : "#maxConcurrentBrowsers";
+      $(selector).attr("max", browserCapacity.maxAllowed);
+      renderBrowserCapacityHint(scope);
+    });
+    if (!Number($("#maxConcurrentBrowsers").val()) || Number($("#maxConcurrentBrowsers").val()) <= 2) {
+      applyBrowserCapacity("create");
+    }
+  } catch (error) {
+    $('[data-browser-capacity-hint]').text("Tarayıcı kapasitesi alınamadı. Varsayılan 1 kullanılacak.");
+  }
 }
 
 function readTextFile(file) {
@@ -197,6 +235,7 @@ function showTaskEditModal(taskId) {
   $("#editCount").val(task.count || 1);
   $("#editDurationHours").val(Number(task.durationHours || 0));
   $("#editMaxAttempts").val(Number(task.maxAttempts || 3));
+  $("#editMaxConcurrentBrowsers").val(Number(task.maxConcurrentBrowsers || 2));
   $("#editHeadless").prop("checked", Boolean(task.headless));
   $("#editDeviceMode").val(task.deviceMode || "desktop");
   $("#editProxyUrl").val(cleanOptionalText(task.proxyUrl));
@@ -219,6 +258,7 @@ async function readTaskEditPayload() {
     keywords: $("#editKeywords").val(),
     targetAddress: $("#editTargetAddress").val(),
     clickCount: Number($("#editCount").val()),
+    maxConcurrentBrowsers: Number($("#editMaxConcurrentBrowsers").val()),
     maxAttempts: Number($("#editMaxAttempts").val()),
     durationHours: Number($("#editDurationHours").val()),
     headless: $("#editHeadless").is(":checked"),
@@ -306,7 +346,7 @@ function renderTask(task) {
         </div>
       </div>
       <div class="task-meta mt-2">
-        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.deviceMode || "desktop"} · ${task.proxyUrl ? "proxy" : "direct"} · ${cookieSummary} · ${new Date(task.createdAt).toLocaleString()}
+        ${task.count} click · ${Number(task.durationHours || 0)} saat · eşzamanlı ${task.maxConcurrentBrowsers || 2} · ${task.headless ? "headless" : "visible"} · ${task.deviceMode || "desktop"} · ${task.proxyUrl ? "proxy" : "direct"} · ${cookieSummary} · ${new Date(task.createdAt).toLocaleString()}
         · retry ${task.maxAttempts || 3}
       </div>
       <div class="progress mt-3" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
@@ -512,6 +552,7 @@ $("#taskForm").on("submit", async function (event) {
         keywords: $("#keywords").val(),
         targetAddress: $("#targetAddress").val(),
         clickCount: Number($("#count").val()),
+        maxConcurrentBrowsers: Number($("#maxConcurrentBrowsers").val()),
         maxAttempts: Number($("#maxAttempts").val()),
         durationHours: Number($("#durationHours").val()),
         headless: $("#headless").is(":checked"),
@@ -618,6 +659,9 @@ $("#logLevel").on("change", loadLogs);
 $(document).on("change", ".cookie-source-toggle input", function () {
   syncCookieSource($(this).closest("[data-cookie-input-group]").data("cookie-input-group"));
 });
+$(document).on("click", "[data-apply-browser-capacity]", function () {
+  applyBrowserCapacity(String($(this).data("apply-browser-capacity")));
+});
 $(document).on("change", "[data-cookie-file]", function () {
   const files = Array.from(this.files || []);
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -663,6 +707,7 @@ syncCookieSource("create");
 syncCookieSource("edit");
 sanitizeOptionalFields();
 checkHealth();
+loadBrowserCapacity();
 loadTasks();
 loadCookies();
 loadLogs();

@@ -28,7 +28,12 @@ class TaskService {
     });
 
     const job = await this.jobService.enqueueTask(task._id);
-    logger.info("task_created", { taskId: String(task._id), targetAddress: task.targetAddress, count: task.count });
+    logger.info("task_created", {
+      taskId: String(task._id),
+      targetAddress: task.targetAddress,
+      count: task.count,
+      maxConcurrentBrowsers: task.maxConcurrentBrowsers
+    });
     await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "created" });
 
     return { ...task.toObject(), jobId: job.id };
@@ -41,7 +46,13 @@ class TaskService {
 
     await this.jobService.removeTaskJobs(taskId);
     const job = await this.jobService.enqueueTask(task._id);
-    logger.info("task_updated", { taskId: String(task._id), targetAddress: task.targetAddress, count: task.count, maxAttempts: task.maxAttempts });
+    logger.info("task_updated", {
+      taskId: String(task._id),
+      targetAddress: task.targetAddress,
+      count: task.count,
+      maxAttempts: task.maxAttempts,
+      maxConcurrentBrowsers: task.maxConcurrentBrowsers
+    });
     await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "updated" });
     return { ...task.toObject(), jobId: job.id };
   }

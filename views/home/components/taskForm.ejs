@@ -30,6 +30,18 @@
         <input class="form-control" id="maxAttempts" type="number" min="1" max="10" value="3">
       </div>
       <div class="col-6">
+        <label for="maxConcurrentBrowsers" class="form-label">Aynı anda tarayıcı</label>
+        <div class="input-group">
+          <input class="form-control" id="maxConcurrentBrowsers" type="number" min="1" value="2">
+          <button class="btn btn-outline-secondary" type="button" data-apply-browser-capacity="create">Önerilen</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="capacity-hint" data-browser-capacity-hint="create">Tarayıcı kapasitesi hesaplanıyor...</div>
+
+    <div class="row g-3 align-items-end">
+      <div class="col-6">
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" role="switch" id="headless" <%= headlessDefault ? "checked" : "" %>>
           <label class="form-check-label" for="headless">Headless</label>

@@ -5,6 +5,7 @@ const { mapWithConcurrency } = require("../Utils/concurrency");
 const { buildQueuedRuns, resolveFinalTaskStatus } = require("../Domain/taskRunPlanner");
 const realtimeEventService = require("./realtimeEventService");
 const taskCancellationService = require("./taskCancellationService");
+const { logger } = require("./logService");
 
 class TaskProcessorService {
   constructor(repository = taskRepository, runService = taskRunService, cancellationService = taskCancellationService) {
@@ -30,7 +31,16 @@ class TaskProcessorService {
     const startedTask = await this.repository.findById(task._id);
     if (!startedTask) return { taskId: String(task._id), status: "deleted" };
 
-    await mapWithConcurrency(startedTask.runs, maxParallelBrowsers, async (run, index) => {
+    const taskConcurrency = Math.max(1, Number(startedTask.maxConcurrentBrowsers || 2));
+    const concurrency = Math.min(taskConcurrency, Math.max(2, Number(maxParallelBrowsers) || 2));
+    logger.info("task_processing_concurrency_resolved", {
+      taskId: String(startedTask._id),
+      requestedConcurrency: taskConcurrency,
+      maxParallelBrowsers,
+      concurrency
+    });
+
+    await mapWithConcurrency(startedTask.runs, concurrency, async (run, index) => {
       await this.runService.run(startedTask, run, index);
       await this.runService.updateJobProgress(startedTask._id, job);
     });

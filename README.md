@@ -103,9 +103,9 @@ npm run worker
 
 Lokal `npm run dev` varsayılan olarak `http://localhost:3000` üzerinde çalışır.
 
-## Local Visible Browser
+## Local Visible Browser macOS/Linux
 
-Docker'sız, browser penceresini görerek test etmek için:
+Docker'sız, macOS/Linux ortamında browser penceresini görerek test etmek için:
 
 ```bash
 ./start.sh
@@ -117,10 +117,58 @@ Script davranışı:
 - Local MongoDB portu kapalıysa `mongodb-community`, `mongodb-community@7.0`, `mongodb-community@6.0` servis adlarını dener.
 - `PORT` varsayılanı `3100` olur.
 - `HEADLESS_DEFAULT=false` olur; formdaki `Headless` switch'i kapalı gelir.
-- `MAX_PARALLEL_BROWSERS=1` olur; görünür browser testinde pencereler üst üste binmez.
+- `MAX_PARALLEL_BROWSERS=2` olur; görünür browser testinde varsayılan olarak en fazla iki pencere paralel açılır.
 - App ve worker aynı terminalden başlar. Ctrl+C veya `killall node` ikisini de kapatır.
 
 Görünür desktop modunda CloakBrowser Chromium `--start-maximized` ile açılır ve viewport gerçek pencere boyutuna bırakılır. Mobil ekran seçilirse pencere `390x844` açılır ve context mobil viewport/touch ayarlarıyla başlar.
+
+Task formundaki `Aynı anda tarayıcı` alanı task bazlı concurrency belirler. UI `/api/system/browser-capacity` üzerinden CPU/RAM'e göre öneri gösterir, fakat gerçek üst sınır her zaman `MAX_PARALLEL_BROWSERS` değeridir. Sunucuda 4 tarayıcı istiyorsan env içinde `MAX_PARALLEL_BROWSERS=4` veya daha yüksek bir değer set edilmelidir.
+
+## Windows Server 2022 Local Run
+
+Windows Server 2022 üzerinde Docker Desktop destekli hedef değildir; native/WSL akışında app ve worker'ı beraber başlatmak için:
+
+```powershell
+.\startwindows.ps1
+```
+
+Node paketleri, CloakBrowser Chromium, MongoDB ve Redis/Memurai kurulumu da denensin istersen PowerShell'i Administrator olarak açıp:
+
+```powershell
+.\startwindows.ps1 -InstallDependencies
+```
+
+Command Prompt veya çift tıklama için:
+
+```bat
+startwindows.cmd
+```
+
+Command Prompt ile otomatik kurulum:
+
+```bat
+startwindows.cmd -InstallDependencies
+```
+
+Git Bash/WSL içinden Windows PowerShell'i çağırmak için:
+
+```bash
+./startwindows
+```
+
+Script davranışı:
+
+- `-InstallDependencies` verilirse `winget`, yoksa Chocolatey ile Node.js LTS, MongoDB ve Memurai Developer kurmayı dener.
+- `node_modules` yoksa `npm install` çalıştırır.
+- `npm run browser:install` ile CloakBrowser Chromium indirmeyi dener.
+- Redis için `Redis` veya `Memurai` Windows service adlarını başlatmayı dener.
+- MongoDB için `MongoDB` Windows service adını başlatmayı dener.
+- `PORT` varsayılanı `3100` olur.
+- `HEADLESS_DEFAULT=true` olur; Windows Server service/desktop session ayrımı nedeniyle headless varsayılan daha güvenlidir.
+- `MAX_PARALLEL_BROWSERS=4`, `REQUEST_BODY_LIMIT=25mb`, `CLOAKBROWSER_AUTO_UPDATE=false` varsayılanları set edilir.
+- App ve worker aynı terminalden başlar. Terminal kapanınca process tree kapatılır.
+
+Windows'ta görünür browser istenirse script'i RDP ile açık kullanıcı oturumunda çalıştırıp `HEADLESS_DEFAULT=false` env değeri ver.
 
 ## Docker
 
@@ -171,7 +219,7 @@ Railway Variables ekranında minimum önerilen değişkenler:
 ```text
 QUEUE_NAME=browser-tasks
 HEADLESS_DEFAULT=true
-MAX_PARALLEL_BROWSERS=1
+MAX_PARALLEL_BROWSERS=2
 CLOAKBROWSER_AUTO_UPDATE=false
 AUTH_USERNAME=hitmaker
 AUTH_PASSWORD=<strong-password>

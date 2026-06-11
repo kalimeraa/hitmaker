@@ -1,5 +1,6 @@
 const { normalizeHost } = require("../Utils/domain");
 const { HttpError } = require("../Utils/httpError");
+const { maxParallelBrowsers } = require("../../config/app");
 
 function parseKeywords(value) {
   return String(value || "")
@@ -48,6 +49,18 @@ function parseMaxAttempts(value) {
   }
 
   return maxAttempts;
+}
+
+function parseMaxConcurrentBrowsers(value) {
+  if (value === "" || typeof value === "undefined" || value === null) return 2;
+
+  const maxConcurrentBrowsers = Number(value);
+  const maxAllowed = Math.max(2, Number(maxParallelBrowsers) || 2);
+  if (!Number.isInteger(maxConcurrentBrowsers) || maxConcurrentBrowsers < 1 || maxConcurrentBrowsers > maxAllowed) {
+    throw new HttpError(400, `Concurrent browsers must be an integer between 1 and ${maxAllowed}`);
+  }
+
+  return maxConcurrentBrowsers;
 }
 
 function parseDeviceMode(value) {
@@ -252,6 +265,7 @@ function validateCreateTaskPayload(body) {
   return {
     keywords,
     count,
+    maxConcurrentBrowsers: parseMaxConcurrentBrowsers(body.maxConcurrentBrowsers),
     maxAttempts: parseMaxAttempts(body.maxAttempts ?? body.tries),
     durationHours: parseDurationHours(body.durationHours),
     targetAddress,

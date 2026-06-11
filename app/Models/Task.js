@@ -62,6 +62,7 @@ const taskSchema = new mongoose.Schema(
     keywords: [String],
     targetAddress: { type: String, required: true },
     count: { type: Number, required: true, min: 1, max: 50 },
+    maxConcurrentBrowsers: { type: Number, default: 2, min: 1, max: 50 },
     maxAttempts: { type: Number, default: 3, min: 1, max: 10 },
     durationHours: { type: Number, default: 0, min: 0 },
     headless: { type: Boolean, default: true },

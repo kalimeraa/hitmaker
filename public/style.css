@@ -359,6 +359,11 @@ h2 {
   font-size: 0.86rem;
 }
 
+.capacity-hint {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 100%);
