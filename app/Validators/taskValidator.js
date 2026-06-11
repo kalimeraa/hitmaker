@@ -9,8 +9,13 @@ function parseKeywords(value) {
     .slice(0, 100);
 }
 
+function normalizeOptionalText(value) {
+  const text = String(value || "").trim();
+  return ["null", "undefined"].includes(text.toLowerCase()) ? "" : text;
+}
+
 function normalizeProxyUrl(value) {
-  const proxyUrl = String(value || "").trim();
+  const proxyUrl = normalizeOptionalText(value);
   if (!proxyUrl) return "";
 
   const parsed = new URL(proxyUrl);
@@ -46,7 +51,7 @@ function parseMaxAttempts(value) {
 }
 
 function extractCookieText(value) {
-  const raw = String(value || "").trim();
+  const raw = normalizeOptionalText(value);
   const cookieOption = raw.match(/(?:^|\s)(?:-b|--cookie)\s+(['"])([\s\S]*?)\1/);
   if (cookieOption) return cookieOption[2];
 
@@ -78,7 +83,7 @@ function cookieDomainForName(name, targetHost) {
 }
 
 function parseNetscapeCookieLines(raw) {
-  return String(raw || "")
+  return normalizeOptionalText(raw)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -107,7 +112,7 @@ function parseNetscapeCookieLines(raw) {
 }
 
 function isNetscapeCookieInput(raw) {
-  return String(raw || "")
+  return normalizeOptionalText(raw)
     .split(/\r?\n/)
     .some((line) => {
       const cleanLine = line.trim().replace(/^#HttpOnly_/, "");
@@ -142,7 +147,7 @@ function parseCookieHeaderPairs(raw, targetHost) {
 }
 
 function parseCookies(value, targetAddress) {
-  const raw = String(value || "").trim();
+  const raw = normalizeOptionalText(value);
   if (!raw) return [];
 
   const targetHost = normalizeHost(targetAddress);

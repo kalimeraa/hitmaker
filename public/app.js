@@ -20,6 +20,20 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function cleanOptionalText(value) {
+  const text = String(value || "").trim();
+  return ["null", "undefined"].includes(text.toLowerCase()) ? "" : text;
+}
+
+function sanitizeOptionalFields() {
+  ["#proxyUrl", "#cookies", "#editProxyUrl", "#editCookies"].forEach((selector) => {
+    const $field = $(selector);
+    if ($field.length) {
+      $field.val(cleanOptionalText($field.val()));
+    }
+  });
+}
+
 async function deleteTask(taskId) {
   allTasks = allTasks.filter((task) => String(task._id) !== String(taskId));
   runPages.delete(String(taskId));
@@ -126,7 +140,7 @@ function showTaskEditModal(taskId) {
   $("#editDurationHours").val(Number(task.durationHours || 0));
   $("#editMaxAttempts").val(Number(task.maxAttempts || 3));
   $("#editHeadless").prop("checked", Boolean(task.headless));
-  $("#editProxyUrl").val(task.proxyUrl || "");
+  $("#editProxyUrl").val(cleanOptionalText(task.proxyUrl));
   $("#editCookies").val((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : "");
   taskEditModal.show();
 }
@@ -139,8 +153,8 @@ function readTaskEditPayload() {
     maxAttempts: Number($("#editMaxAttempts").val()),
     durationHours: Number($("#editDurationHours").val()),
     headless: $("#editHeadless").is(":checked"),
-    proxyUrl: $("#editProxyUrl").val(),
-    cookies: $("#editCookies").val()
+    proxyUrl: cleanOptionalText($("#editProxyUrl").val()),
+    cookies: cleanOptionalText($("#editCookies").val())
   };
 }
 
@@ -321,8 +335,8 @@ $("#taskForm").on("submit", async function (event) {
         maxAttempts: Number($("#maxAttempts").val()),
         durationHours: Number($("#durationHours").val()),
         headless: $("#headless").is(":checked"),
-        proxyUrl: $("#proxyUrl").val(),
-        cookies: $("#cookies").val()
+        proxyUrl: cleanOptionalText($("#proxyUrl").val()),
+        cookies: cleanOptionalText($("#cookies").val())
       })
     });
     await loadTasks();
@@ -416,6 +430,7 @@ events.addEventListener("log.created", (event) => {
 
 candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
 taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
+sanitizeOptionalFields();
 checkHealth();
 loadTasks();
 loadLogs();
