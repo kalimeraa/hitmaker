@@ -63,6 +63,7 @@ module.exports = {
   mongoUri: buildMongoUri(),
   redis: buildRedisConfig(),
   queueName: process.env.QUEUE_NAME || "browser-tasks",
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || "25mb",
   auth: {
     username: process.env.AUTH_USERNAME || "hitmaker",
     password: process.env.AUTH_PASSWORD || "hitmaker34716",

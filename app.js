@@ -6,6 +6,7 @@ const webRoutes = require("./routes/webRoutes");
 const { requireAuth } = require("./app/Http/Middleware/authMiddleware");
 const { errorHandler } = require("./app/Http/Middleware/errorHandler");
 const { requestLogger } = require("./app/Http/Middleware/requestLogger");
+const { requestBodyLimit } = require("./config/app");
 
 function createApp() {
   const app = express();
@@ -13,8 +14,8 @@ function createApp() {
   app.set("view engine", "ejs");
   app.set("views", path.join(__dirname, "views"));
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json({ limit: requestBodyLimit }));
+  app.use(express.urlencoded({ extended: false, limit: requestBodyLimit }));
   app.use(requestLogger);
   app.use(express.static(path.join(__dirname, "public")));
   app.use(authRoutes);

@@ -193,6 +193,7 @@ Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `
 - `REDIS_URL`: Redis bağlantı URL'i. Verilirse host/port/password ayarlarının yerine kullanılır.
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: Redis bağlantısı.
 - `QUEUE_NAME`: BullMQ queue adı.
+- `REQUEST_BODY_LIMIT`: JSON/form payload limiti. Çoklu cookie dosyası upload için varsayılan `25mb`.
 - `AUTH_USERNAME`: Panel kullanıcı adı. Varsayılan `hitmaker`.
 - `AUTH_PASSWORD`: Panel şifresi. Varsayılan `hitmaker34716`.
 - `AUTH_JWT_SECRET`: Panel JWT token imzası için secret.
