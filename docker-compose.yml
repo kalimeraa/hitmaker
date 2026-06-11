@@ -2,27 +2,12 @@ services:
   app:
     build: .
     command: npm start
+    env_file:
+      - .env
     tmpfs:
       - /tmp:size=512m
     ports:
       - "3100:3000"
-    environment:
-      PORT: 3000
-      MONGODB_URI: mongodb://mongo:27017/hitmaker
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      QUEUE_NAME: browser-tasks
-      MAX_PARALLEL_BROWSERS: 1
-      TASK_TIMEOUT_MS: 60000
-      GOOGLE_MAX_RESULT_PAGES: 10
-      GOOGLE_SEARCH_HL: tr
-      GOOGLE_SEARCH_GL: tr
-      GOOGLE_SEARCH_PWS: ""
-      GOOGLE_SEARCH_UDM: ""
-      CLOAKBROWSER_GEOIP: "true"
-      CLOAKBROWSER_HUMANIZE: "true"
-      CLOAKBROWSER_HUMAN_PRESET: default
-      CLOAKBROWSER_AUTO_UPDATE: "false"
     depends_on:
       - redis
       - mongo
@@ -30,24 +15,10 @@ services:
   worker:
     build: .
     command: npm run worker
+    env_file:
+      - .env
     tmpfs:
       - /tmp:size=512m
-    environment:
-      MONGODB_URI: mongodb://mongo:27017/hitmaker
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      QUEUE_NAME: browser-tasks
-      MAX_PARALLEL_BROWSERS: 1
-      TASK_TIMEOUT_MS: 60000
-      GOOGLE_MAX_RESULT_PAGES: 10
-      GOOGLE_SEARCH_HL: tr
-      GOOGLE_SEARCH_GL: tr
-      GOOGLE_SEARCH_PWS: ""
-      GOOGLE_SEARCH_UDM: ""
-      CLOAKBROWSER_GEOIP: "true"
-      CLOAKBROWSER_HUMANIZE: "true"
-      CLOAKBROWSER_HUMAN_PRESET: default
-      CLOAKBROWSER_AUTO_UPDATE: "false"
     depends_on:
       - redis
       - mongo

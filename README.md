@@ -141,6 +141,17 @@ Docker Compose servisleri:
 - `redis`: Sadece compose network içinde kullanılır.
 - `mongo`: Sadece compose network içinde kullanılır.
 
+Docker Compose environment için tek kaynak olarak `.env` dosyasını kullanır ve bu dosyayı `app` ile `worker` servislerine `env_file` üzerinden yükler. Docker Compose ile çalıştırırken `.env` içinde Redis/Mongo hostları container network isimleri olmalıdır:
+
+```text
+MONGODB_URI=mongodb://mongo:27017/hitmaker
+REDIS_HOST=redis
+REDIS_PORT=6379
+CLOAKBROWSER_AUTO_UPDATE=false
+```
+
+Docker'sız lokal `npm run dev` / `npm run worker` akışında aynı `.env` dosyası kullanılacaksa bu değerler `localhost` olarak değiştirilmelidir. `./start.sh` Docker'sız görünür test için kendi local Redis/Mongo varsayılanlarını set eder.
+
 Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build sırasında `npx cloakbrowser install` ile CloakBrowser Chromium binary'sini indirir. `CLOAKBROWSER_AUTO_UPDATE=false` kullanılır; binary kontrolsüz şekilde runtime'da güncellenmez.
 
 ## Railway
@@ -160,6 +171,8 @@ CLOAKBROWSER_AUTO_UPDATE=false
 
 `REDIS_URL` verilirse `REDIS_HOST`, `REDIS_PORT` ve `REDIS_PASSWORD` yerine geçer. Railway Redis bağlantısı `redis://...` veya TLS gerekiyorsa `rediss://...` formatında olabilir.
 
+MongoDB bağlantısı için tercih edilen değişken `MONGODB_URI`'dir. Railway Mongo servisinde değişken adı `MONGO_URL` veya `MONGO_PRIVATE_URL` olarak gelirse uygulama bunları da fallback olarak okur. Deploy ortamında `mongodb://localhost:27017/hitmaker` kullanılmamalıdır; bu adres container'ın kendi içini gösterir.
+
 Worker ayrı bir Railway servis/process olarak çalışmalıdır. Web servis `npm start` ile Express uygulamasını, worker servis `npm run worker` ile BullMQ worker'ını çalıştırır. Sadece web container'ı deploy edilirse task oluşturulur ama queue job'ları işlenmez.
 
 ## Ortam Değişkenleri
@@ -167,6 +180,7 @@ Worker ayrı bir Railway servis/process olarak çalışmalıdır. Web servis `np
 - `PORT`: Express portu. Varsayılan `3000`.
 - `HEADLESS_DEFAULT`: UI formundaki `Headless` switch varsayılanı. `./start.sh` bunu `false` yapar.
 - `MONGODB_URI`: MongoDB bağlantısı.
+- `MONGO_URL`, `MONGO_PRIVATE_URL`: Railway gibi platformlarda gelen MongoDB bağlantı alias'ları. `MONGODB_URI` yoksa fallback olarak okunur.
 - `REDIS_URL`: Redis bağlantı URL'i. Verilirse host/port/password ayarlarının yerine kullanılır.
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: Redis bağlantısı.
 - `QUEUE_NAME`: BullMQ queue adı.

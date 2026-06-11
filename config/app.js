@@ -10,6 +10,13 @@ const cloakBrowserPersistentProfile = optionalBoolean(process.env.CLOAKBROWSER_P
 const maxTaskTimeoutMs = 60000;
 const configuredTaskTimeoutMs = Number(process.env.TASK_TIMEOUT_MS || maxTaskTimeoutMs);
 
+function buildMongoUri() {
+  return process.env.MONGODB_URI
+    || process.env.MONGO_URL
+    || process.env.MONGO_PRIVATE_URL
+    || "mongodb://localhost:27017/hitmaker";
+}
+
 function buildRedisConfig() {
   if (process.env.REDIS_URL) {
     const redisUrl = new URL(process.env.REDIS_URL);
@@ -35,7 +42,7 @@ function buildRedisConfig() {
 module.exports = {
   port: Number(process.env.PORT || 3000),
   headlessDefault: optionalBoolean(process.env.HEADLESS_DEFAULT) ?? true,
-  mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/hitmaker",
+  mongoUri: buildMongoUri(),
   redis: buildRedisConfig(),
   queueName: process.env.QUEUE_NAME || "browser-tasks",
   auth: {
