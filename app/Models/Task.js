@@ -1,5 +1,19 @@
 const mongoose = require("mongoose");
 
+const cookieSchema = new mongoose.Schema(
+  {
+    name: String,
+    value: String,
+    domain: String,
+    path: String,
+    expires: Number,
+    httpOnly: Boolean,
+    secure: Boolean,
+    sameSite: String
+  },
+  { _id: false }
+);
+
 const runSchema = new mongoose.Schema(
   {
     keyword: String,
@@ -15,6 +29,13 @@ const runSchema = new mongoose.Schema(
     error: String,
     searchUrl: String,
     lastGoogleUrl: String,
+    cookieSetName: String,
+    cookieSetIndex: Number,
+    cookieSetCount: Number,
+    cookiePoolId: String,
+    proxyHost: String,
+    proxyExitIp: String,
+    proxyExitIpError: String,
     googleBlocked: { type: Boolean, default: false },
     candidates: [
       new mongoose.Schema(
@@ -46,17 +67,13 @@ const taskSchema = new mongoose.Schema(
     headless: { type: Boolean, default: true },
     deviceMode: { type: String, enum: ["desktop", "mobile"], default: "desktop" },
     proxyUrl: String,
-    cookies: [
+    useCookiePool: { type: Boolean, default: false },
+    cookies: [cookieSchema],
+    cookieSets: [
       new mongoose.Schema(
         {
           name: String,
-          value: String,
-          domain: String,
-          path: String,
-          expires: Number,
-          httpOnly: Boolean,
-          secure: Boolean,
-          sameSite: String
+          cookies: [cookieSchema]
         },
         { _id: false }
       )

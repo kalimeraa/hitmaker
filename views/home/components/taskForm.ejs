@@ -50,9 +50,19 @@
       <input class="form-control" id="proxyUrl" placeholder="http://user:pass@host:port">
     </div>
 
-    <div>
-      <label for="cookies" class="form-label">Cookie</label>
-      <textarea class="form-control" id="cookies" rows="5" placeholder="name=value; name2=value2&#10;veya Netscape cookie file / JSON cookie array"></textarea>
+    <div class="cookie-input-group" data-cookie-input-group="create">
+      <label class="form-label">Cookie</label>
+      <div class="btn-group w-100 cookie-source-toggle" role="group" aria-label="Cookie kaynağı">
+        <input type="radio" class="btn-check" name="cookieSource" id="cookieSourceText" value="text" autocomplete="off" checked>
+        <label class="btn btn-outline-secondary" for="cookieSourceText">Metin gir</label>
+        <input type="radio" class="btn-check" name="cookieSource" id="cookieSourceFile" value="file" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="cookieSourceFile">Dosya yükle</label>
+        <input type="radio" class="btn-check" name="cookieSource" id="cookieSourcePool" value="pool" autocomplete="off">
+        <label class="btn btn-outline-secondary" for="cookieSourcePool">Havuzdan kullan</label>
+      </div>
+      <textarea class="form-control mt-2" id="cookies" rows="5" data-cookie-text placeholder="name=value; name2=value2&#10;veya Netscape cookie file / JSON cookie array"></textarea>
+      <input class="form-control mt-2 d-none" id="cookieFile" type="file" data-cookie-file accept=".txt,.json,.cookies,text/plain,application/json" multiple>
+      <div class="form-text" data-cookie-file-name></div>
     </div>
 
     <button class="btn btn-primary btn-lg" type="submit" id="createTaskBtn">

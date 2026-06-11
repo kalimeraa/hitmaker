@@ -1,6 +1,9 @@
 node_modules/
 .env
+.proxy
 data/
 storage/
+dummycookies/
+aliciacperez17x1@gmail.com.txt
 npm-debug.log*
 .DS_Store

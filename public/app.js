@@ -6,6 +6,7 @@ const taskPageSize = 10;
 const runPageSize = 10;
 let taskPage = 1;
 let allTasks = [];
+let allCookies = [];
 const runPages = new Map();
 let pendingTaskLoad = null;
 let candidateModal = null;
@@ -23,6 +24,63 @@ function escapeHtml(value) {
 function cleanOptionalText(value) {
   const text = String(value || "").trim();
   return ["null", "undefined"].includes(text.toLowerCase()) ? "" : text;
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Cookie dosyası okunamadı"));
+    reader.readAsText(file);
+  });
+}
+
+function cookieGroupFor(scope) {
+  return $(`[data-cookie-input-group="${scope}"]`);
+}
+
+function selectedCookieSource(scope) {
+  const $group = cookieGroupFor(scope);
+  return $group.find('input[type="radio"]:checked').val() || "text";
+}
+
+function syncCookieSource(scope) {
+  const $group = cookieGroupFor(scope);
+  const source = selectedCookieSource(scope);
+  $group.find("[data-cookie-text]").toggleClass("d-none", source !== "text");
+  $group.find("[data-cookie-file]").toggleClass("d-none", source !== "file");
+  if (source === "pool") {
+    $group.find("[data-cookie-file-name]").text("Aktif cookie havuzu kullanılacak. Broken/disabled cookieler seçilmez.");
+  } else if ($group.find("[data-cookie-file-name]").text().includes("Aktif cookie havuzu")) {
+    $group.find("[data-cookie-file-name]").text("");
+  }
+}
+
+async function readCookieInput(scope) {
+  const $group = cookieGroupFor(scope);
+  const source = selectedCookieSource(scope);
+  if (source === "pool") {
+    return { cookies: "", cookieSets: [], useCookiePool: true };
+  }
+  if (source !== "file") {
+    return { cookies: cleanOptionalText($group.find("[data-cookie-text]").val()), useCookiePool: false };
+  }
+
+  const files = Array.from($group.find("[data-cookie-file]")[0].files || []);
+  if (!files.length) return { cookies: "", cookieSets: [], useCookiePool: false };
+
+  const cookieSets = await Promise.all(files.map(async (file) => ({
+    name: file.name,
+    content: cleanOptionalText(await readTextFile(file))
+  })));
+
+  return { cookies: "", cookieSets, useCookiePool: false };
+}
+
+function resetCookieFile(scope) {
+  const $group = cookieGroupFor(scope);
+  $group.find("[data-cookie-file]").val("");
+  $group.find("[data-cookie-file-name]").text("");
 }
 
 function sanitizeOptionalFields() {
@@ -142,11 +200,21 @@ function showTaskEditModal(taskId) {
   $("#editHeadless").prop("checked", Boolean(task.headless));
   $("#editDeviceMode").val(task.deviceMode || "desktop");
   $("#editProxyUrl").val(cleanOptionalText(task.proxyUrl));
-  $("#editCookies").val((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : "");
+  $("#editCookies").val((task.cookieSets || []).length
+    ? JSON.stringify({ cookieSets: task.cookieSets }, null, 2)
+    : ((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : ""));
+  if (task.useCookiePool) {
+    $("#editCookieSourcePool").prop("checked", true);
+  } else {
+    $("#editCookieSourceText").prop("checked", true);
+  }
+  resetCookieFile("edit");
+  syncCookieSource("edit");
   taskEditModal.show();
 }
 
-function readTaskEditPayload() {
+async function readTaskEditPayload() {
+  const cookiePayload = await readCookieInput("edit");
   return {
     keywords: $("#editKeywords").val(),
     targetAddress: $("#editTargetAddress").val(),
@@ -156,7 +224,7 @@ function readTaskEditPayload() {
     headless: $("#editHeadless").is(":checked"),
     deviceMode: $("#editDeviceMode").val(),
     proxyUrl: cleanOptionalText($("#editProxyUrl").val()),
-    cookies: cleanOptionalText($("#editCookies").val())
+    ...cookiePayload
   };
 }
 
@@ -184,6 +252,13 @@ function renderPager({ page, totalItems, pageSize, target, itemLabel }) {
 function renderTask(task) {
   const percent = task.count ? Math.round((task.progress / task.count) * 100) : 0;
   const runs = task.runs || [];
+  const cookieSets = task.cookieSets || [];
+  const cookieCount = cookieSets.length
+    ? cookieSets.reduce((total, cookieSet) => total + ((cookieSet.cookies || []).length), 0)
+    : (task.cookies || []).length;
+  const cookieSummary = cookieSets.length
+    ? `${cookieCount} cookie / ${cookieSets.length} set`
+    : (task.useCookiePool ? "cookie havuzu" : `${cookieCount} cookie`);
   const taskId = String(task._id);
   const runTotalPages = Math.max(Math.ceil(runs.length / runPageSize), 1);
   const runPage = clampPage(runPages.get(taskId) || 1, runTotalPages);
@@ -192,6 +267,12 @@ function renderTask(task) {
   const visibleRuns = runs.slice(runStart, runStart + runPageSize);
   const renderedRuns = visibleRuns.map((run, offset) => {
     const runIndex = runStart + offset;
+    const cookieInfo = run.cookieSetName
+      ? `Cookie: ${run.cookieSetName}${Number.isInteger(run.cookieSetIndex) ? ` (${run.cookieSetIndex + 1}/${run.cookieSetCount || "?"})` : ""}`
+      : `Cookie: ${(task.cookies || []).length ? "tek cookie set" : "-"}`;
+    const proxyInfo = task.proxyUrl
+      ? `IP: ${run.proxyExitIp || (run.proxyExitIpError ? `kontrol hatası` : "kontrol ediliyor")}${run.proxyHost ? ` · ${run.proxyHost}` : ""}`
+      : "IP: direct";
     const retryButton = canRetryRun(run)
       ? `<button class="btn btn-outline-primary btn-sm run-retry-btn" type="button" data-retry-task="${escapeHtml(taskId)}" data-retry-run="${runIndex}">Retry</button>`
       : "";
@@ -203,7 +284,10 @@ function renderTask(task) {
     <div class="run-row">
       <span>${escapeHtml(run.keyword)}</span>
       <span class="run-status-cell">${statusBadge(run.status)}${retryButton}${candidateButton}</span>
-      <span>${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>${run.resultPage ? ` · page ${run.resultPage}` : ""}${run.resultRank ? ` · rank ${run.resultRank}` : ""}` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
+      <span>
+        <span class="run-target-line">${run.matchedUrl ? `<a href="${escapeHtml(run.matchedUrl)}" target="_blank" rel="noreferrer">${escapeHtml(run.matchedUrl)}</a>${run.resultPage ? ` · page ${run.resultPage}` : ""}${run.resultRank ? ` · rank ${run.resultRank}` : ""}` : escapeHtml(run.error || (run.scheduledAt ? `scheduled ${new Date(run.scheduledAt).toLocaleString()}` : "-"))}</span>
+        <span class="run-debug-line">${escapeHtml(cookieInfo)} · ${escapeHtml(proxyInfo)}${run.proxyExitIpError ? ` · ${escapeHtml(run.proxyExitIpError)}` : ""}</span>
+      </span>
     </div>
   `;
   }).join("");
@@ -222,7 +306,7 @@ function renderTask(task) {
         </div>
       </div>
       <div class="task-meta mt-2">
-        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.deviceMode || "desktop"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
+        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.deviceMode || "desktop"} · ${task.proxyUrl ? "proxy" : "direct"} · ${cookieSummary} · ${new Date(task.createdAt).toLocaleString()}
         · retry ${task.maxAttempts || 3}
       </div>
       <div class="progress mt-3" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
@@ -311,6 +395,99 @@ async function loadErrors() {
   $("#errors").html(errors.length ? errors.map(renderLog).join("") : '<div class="text-secondary">Kayıtlı sistem hatası yok.</div>');
 }
 
+function cookieStatusBadge(status) {
+  return `<span class="status-pill status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+}
+
+function renderCookiePoolItem(cookie) {
+  const cookieId = String(cookie._id);
+  const cookieCount = (cookie.cookies || []).length;
+  const lastUsed = cookie.lastUsedAt ? new Date(cookie.lastUsedAt).toLocaleString() : "-";
+  const lastFailure = cookie.lastFailureAt ? new Date(cookie.lastFailureAt).toLocaleString() : "-";
+  const statusAction = cookie.status === "active"
+    ? `<button class="btn btn-outline-secondary btn-sm" type="button" data-cookie-status="${escapeHtml(cookieId)}" data-status="disabled">Pasifleştir</button>`
+    : `<button class="btn btn-outline-success btn-sm" type="button" data-cookie-status="${escapeHtml(cookieId)}" data-status="active">Kullanıma aç</button>`;
+
+  return `
+    <div class="cookie-pool-row">
+      <div>
+        <div class="fw-semibold">${escapeHtml(cookie.name)}</div>
+        <div class="task-meta">${cookieCount} cookie · fail ${Number(cookie.failureCount || 0)} · son kullanım ${escapeHtml(lastUsed)} · son hata ${escapeHtml(lastFailure)}</div>
+        ${cookie.disabledReason ? `<div class="task-meta">${escapeHtml(cookie.disabledReason)}</div>` : ""}
+        ${cookie.lastExitIp ? `<div class="task-meta">son IP: ${escapeHtml(cookie.lastExitIp)}</div>` : ""}
+      </div>
+      <div>${cookieStatusBadge(cookie.status)}</div>
+      <div class="cookie-pool-actions">
+        ${statusAction}
+        <button class="btn btn-outline-warning btn-sm" type="button" data-cookie-status="${escapeHtml(cookieId)}" data-status="broken">Patlak işaretle</button>
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-cookie-edit="${escapeHtml(cookieId)}">Düzenle</button>
+        <button class="btn btn-outline-danger btn-sm" type="button" data-cookie-delete="${escapeHtml(cookieId)}">Sil</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCookiePool() {
+  $("#cookies").html(allCookies.length ? allCookies.map(renderCookiePoolItem).join("") : '<div class="empty-state">Cookie havuzu boş.</div>');
+}
+
+async function loadCookies() {
+  allCookies = await $.getJSON("/api/cookies");
+  renderCookiePool();
+}
+
+async function importCookiePoolFiles() {
+  const files = Array.from($("#cookiePoolFiles")[0].files || []);
+  if (!files.length) throw new Error("En az bir cookie dosyası seç");
+
+  const cookieSets = await Promise.all(files.map(async (file) => ({
+    name: file.name,
+    content: cleanOptionalText(await readTextFile(file))
+  })));
+
+  await $.ajax({
+    method: "POST",
+    url: "/api/cookies",
+    contentType: "application/json",
+    data: JSON.stringify({
+      targetAddress: cleanOptionalText($("#cookiePoolTargetAddress").val()) || "google.com",
+      notes: cleanOptionalText($("#cookiePoolNotes").val()),
+      cookieSets
+    })
+  });
+}
+
+async function updateCookieStatus(cookieId, status) {
+  const reason = status === "active" ? "" : prompt("Sebep / not", status === "broken" ? "Google blocked" : "Manuel pasif") || "";
+  await $.ajax({
+    method: "PATCH",
+    url: `/api/cookies/${encodeURIComponent(cookieId)}/status`,
+    contentType: "application/json",
+    data: JSON.stringify({ status, reason })
+  });
+}
+
+async function editCookiePoolItem(cookieId) {
+  const cookie = allCookies.find((item) => String(item._id) === String(cookieId));
+  if (!cookie) return;
+
+  const name = prompt("Cookie adı", cookie.name || "");
+  if (!name) return;
+  const notes = prompt("Not", cookie.notes || "") || "";
+
+  await $.ajax({
+    method: "PUT",
+    url: `/api/cookies/${encodeURIComponent(cookieId)}`,
+    contentType: "application/json",
+    data: JSON.stringify({ name, notes })
+  });
+}
+
+async function deleteCookiePoolItem(cookieId) {
+  if (!confirm("Cookie havuzdan silinsin mi?")) return;
+  await $.ajax({ method: "DELETE", url: `/api/cookies/${encodeURIComponent(cookieId)}` });
+}
+
 async function checkHealth() {
   try {
     await $.getJSON("/api/health");
@@ -326,6 +503,7 @@ $("#taskForm").on("submit", async function (event) {
   $button.prop("disabled", true).text("Açılıyor...");
 
   try {
+    const cookiePayload = await readCookieInput("create");
     await $.ajax({
       method: "POST",
       url: "/api/tasks",
@@ -339,7 +517,7 @@ $("#taskForm").on("submit", async function (event) {
         headless: $("#headless").is(":checked"),
         deviceMode: $("#deviceMode").val(),
         proxyUrl: cleanOptionalText($("#proxyUrl").val()),
-        cookies: cleanOptionalText($("#cookies").val())
+        ...cookiePayload
       })
     });
     await loadTasks();
@@ -377,7 +555,7 @@ $("#taskEditForm").on("submit", async function (event) {
   $button.prop("disabled", true).text("Kaydediliyor...");
 
   try {
-    await updateTask(taskId, readTaskEditPayload());
+    await updateTask(taskId, await readTaskEditPayload());
     taskEditModal.hide();
     await loadTasks();
   } catch (xhr) {
@@ -385,6 +563,42 @@ $("#taskEditForm").on("submit", async function (event) {
   } finally {
     $button.prop("disabled", false).text("Kaydet ve yeniden başlat");
   }
+});
+$("#cookieImportForm").on("submit", async function (event) {
+  event.preventDefault();
+  const $button = $("#cookieImportBtn");
+  $button.prop("disabled", true).text("Yükleniyor...");
+
+  try {
+    await importCookiePoolFiles();
+    $("#cookiePoolFiles").val("");
+    $("#cookiePoolFileName").text("");
+    await loadCookies();
+  } catch (error) {
+    alert((error.responseJSON && error.responseJSON.error) || error.message || "Cookie yüklenemedi");
+  } finally {
+    $button.prop("disabled", false).text("Havuza yükle");
+  }
+});
+$("#cookiePoolFiles").on("change", function () {
+  const files = Array.from(this.files || []);
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  $("#cookiePoolFileName").text(files.length ? `${files.length} dosya · ${Math.ceil(totalSize / 1024)} KB` : "");
+});
+$("#cookies").on("click", "[data-cookie-status]", function () {
+  updateCookieStatus($(this).data("cookie-status"), String($(this).data("status"))).then(loadCookies).catch((error) => {
+    alert((error.responseJSON && error.responseJSON.error) || "Cookie durumu değiştirilemedi");
+  });
+});
+$("#cookies").on("click", "[data-cookie-edit]", function () {
+  editCookiePoolItem($(this).data("cookie-edit")).then(loadCookies).catch((error) => {
+    alert((error.responseJSON && error.responseJSON.error) || "Cookie güncellenemedi");
+  });
+});
+$("#cookies").on("click", "[data-cookie-delete]", function () {
+  deleteCookiePoolItem($(this).data("cookie-delete")).then(loadCookies).catch((error) => {
+    alert((error.responseJSON && error.responseJSON.error) || "Cookie silinemedi");
+  });
 });
 $(document).on("click", "[data-page-target]", function () {
   const target = String($(this).data("page-target"));
@@ -401,9 +615,20 @@ $(document).on("click", "[data-page-target]", function () {
   }
 });
 $("#logLevel").on("change", loadLogs);
+$(document).on("change", ".cookie-source-toggle input", function () {
+  syncCookieSource($(this).closest("[data-cookie-input-group]").data("cookie-input-group"));
+});
+$(document).on("change", "[data-cookie-file]", function () {
+  const files = Array.from(this.files || []);
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const label = files.length
+    ? `${files.length} dosya · ${Math.ceil(totalSize / 1024)} KB`
+    : "";
+  $(this).siblings("[data-cookie-file-name]").text(label);
+});
 
 function setStreamState(online) {
-  $("#taskLiveState, #logLiveState, #errorLiveState")
+  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState")
     .toggleClass("is-offline", !online)
     .text(online ? "live" : "reconnecting");
 }
@@ -414,6 +639,7 @@ events.addEventListener("open", () => setStreamState(true));
 events.addEventListener("heartbeat", () => setStreamState(true));
 events.addEventListener("error", () => setStreamState(false));
 events.addEventListener("task.updated", scheduleLoadTasks);
+events.addEventListener("cookie.updated", loadCookies);
 events.addEventListener("task.deleted", (event) => {
   const payload = JSON.parse(event.data);
   allTasks = allTasks.filter((task) => String(task._id) !== String(payload.taskId));
@@ -433,8 +659,11 @@ events.addEventListener("log.created", (event) => {
 
 candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
 taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
+syncCookieSource("create");
+syncCookieSource("edit");
 sanitizeOptionalFields();
 checkHealth();
 loadTasks();
+loadCookies();
 loadLogs();
 loadErrors();

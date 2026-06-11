@@ -1,0 +1,25 @@
+<div class="tab-pane fade" id="cookiesPane">
+  <div class="toolbar">
+    <h2>Cookieler</h2>
+    <span class="live-indicator" id="cookieLiveState">live</span>
+  </div>
+
+  <form id="cookieImportForm" class="cookie-pool-import">
+    <div>
+      <label for="cookiePoolTargetAddress" class="form-label">Cookie target domain</label>
+      <input class="form-control" id="cookiePoolTargetAddress" value="galabet.galacam.cam">
+    </div>
+    <div>
+      <label for="cookiePoolFiles" class="form-label">Cookie dosyaları</label>
+      <input class="form-control" id="cookiePoolFiles" type="file" accept=".txt,.json,.cookies,text/plain,application/json" multiple>
+      <div class="form-text" id="cookiePoolFileName"></div>
+    </div>
+    <div>
+      <label for="cookiePoolNotes" class="form-label">Not</label>
+      <input class="form-control" id="cookiePoolNotes" placeholder="isteğe bağlı">
+    </div>
+    <button class="btn btn-primary" type="submit" id="cookieImportBtn">Havuza yükle</button>
+  </form>
+
+  <div id="cookies" class="cookie-pool-list mt-3"></div>
+</div>

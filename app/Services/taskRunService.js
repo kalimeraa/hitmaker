@@ -6,6 +6,7 @@ const { logger } = require("./logService");
 const realtimeEventService = require("./realtimeEventService");
 const taskCancellationService = require("./taskCancellationService");
 const runScheduleService = require("./runScheduleService");
+const cookiePoolService = require("./cookiePoolService");
 
 function withTimeout(promise, timeoutMs) {
   let timeoutId;
@@ -41,6 +42,49 @@ function shouldRetryFailure(error) {
 
 function isGoogleResponseCodeFailure(error) {
   return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
+}
+
+function selectCookieSetFromList(cookieSets, runIndex, attemptsBeforeRun = 0) {
+  if (!cookieSets.length) return null;
+  const cookieSetIndex = (Number(runIndex) + Number(attemptsBeforeRun || 0)) % cookieSets.length;
+  const cookieSet = cookieSets[cookieSetIndex];
+  return {
+    cookies: cookieSet.cookies || [],
+    cookieSetName: cookieSet.name || `cookie-set-${cookieSetIndex + 1}`,
+    cookieSetIndex,
+    cookieSetCount: cookieSets.length,
+    cookiePoolId: cookieSet._id ? String(cookieSet._id) : ""
+  };
+}
+
+async function selectRunCookies(task, runIndex, attemptsBeforeRun = 0) {
+  if (task.useCookiePool) {
+    const activePoolItems = await cookiePoolService.listActiveCookies();
+    const selectedPoolItem = selectCookieSetFromList(activePoolItems, runIndex, attemptsBeforeRun);
+    if (selectedPoolItem) return selectedPoolItem;
+  }
+
+  const cookieSets = Array.isArray(task.cookieSets) ? task.cookieSets.filter((cookieSet) => cookieSet && cookieSet.cookies && cookieSet.cookies.length) : [];
+  const selectedCookieSet = selectCookieSetFromList(cookieSets, runIndex, attemptsBeforeRun);
+  if (selectedCookieSet) return selectedCookieSet;
+
+  return {
+    cookies: task.cookies || [],
+    cookieSetName: "",
+    cookieSetIndex: null,
+    cookieSetCount: 0,
+    cookiePoolId: ""
+  };
+}
+
+function runProxyHost(proxyUrl) {
+  if (!proxyUrl) return "";
+  try {
+    const url = new URL(proxyUrl);
+    return url.host;
+  } catch (error) {
+    return "";
+  }
 }
 
 class TaskRunService {
@@ -79,10 +123,28 @@ class TaskRunService {
       const latestRun = latestTask && latestTask.runs && latestTask.runs[index];
       const attemptsBeforeRun = Number((latestRun && latestRun.attempts) || 0);
       const attemptNumber = attemptsBeforeRun + 1;
+      const selectedCookies = await selectRunCookies(latestTask, index, attemptsBeforeRun);
+      const proxyHost = runProxyHost(latestTask.proxyUrl);
 
       await this.repository.startRunAttempt(task._id, index);
+      await this.repository.updateRun(task._id, index, {
+        cookieSetName: selectedCookies.cookieSetName,
+        cookieSetIndex: selectedCookies.cookieSetIndex,
+        cookieSetCount: selectedCookies.cookieSetCount,
+        cookiePoolId: selectedCookies.cookiePoolId,
+        proxyHost,
+        proxyExitIp: "",
+        proxyExitIpError: ""
+      });
       await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_started", runIndex: index });
-      logAutomationEvent("task_run_started", { attempt: attemptNumber, maxAttempts });
+      logAutomationEvent("task_run_started", {
+        attempt: attemptNumber,
+        maxAttempts,
+        cookieSetName: selectedCookies.cookieSetName,
+        cookieSetIndex: selectedCookies.cookieSetIndex,
+        cookieSetCount: selectedCookies.cookieSetCount,
+        cookiePoolId: selectedCookies.cookiePoolId
+      });
 
       try {
         const result = await withTimeout(this.browserAutomation({
@@ -91,7 +153,7 @@ class TaskRunService {
           headless: task.headless,
           deviceMode: task.deviceMode || "desktop",
           proxyUrl: task.proxyUrl,
-          cookies: task.cookies,
+          cookies: selectedCookies.cookies,
           onEvent: async (event, meta = {}) => {
             logAutomationEvent(event, meta);
             if (event === "google_search_navigation_started") {
@@ -100,6 +162,26 @@ class TaskRunService {
                 lastGoogleUrl: meta.searchUrl,
                 googleBlocked: false
               });
+            }
+            if (event === "browser_proxy_exit_ip_checked") {
+              await cookiePoolService.markUsed(selectedCookies.cookiePoolId, {
+                taskId: String(task._id),
+                runIndex: index,
+                exitIp: meta.exitIp || ""
+              });
+              await this.repository.updateRun(task._id, index, {
+                proxyHost: meta.proxyHost || proxyHost,
+                proxyExitIp: meta.exitIp || "",
+                proxyExitIpError: ""
+              });
+              await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_proxy_exit_ip_checked", runIndex: index });
+            }
+            if (event === "browser_proxy_exit_ip_check_failed") {
+              await this.repository.updateRun(task._id, index, {
+                proxyHost: meta.proxyHost || proxyHost,
+                proxyExitIpError: meta.error || "proxy exit IP check failed"
+              });
+              await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_proxy_exit_ip_check_failed", runIndex: index });
             }
             if (event === "google_results_page_check_started") {
               await this.repository.updateRun(task._id, index, {
@@ -135,6 +217,9 @@ class TaskRunService {
         }), taskTimeoutMs + 5000);
 
         if (!isSuccessfulResult(result) && attemptNumber < maxAttempts) {
+          if (result.googleBlocked) {
+            await cookiePoolService.markBroken(selectedCookies.cookiePoolId, result.status || "blocked_by_google");
+          }
           await this.repository.updateRun(task._id, index, {
             status: "queued",
             matchedUrl: result.matchedUrl,
@@ -157,12 +242,16 @@ class TaskRunService {
           googleBlocked: Boolean(result.googleBlocked),
           finishedAt: new Date()
         });
+        if (result.googleBlocked) {
+          await cookiePoolService.markBroken(selectedCookies.cookiePoolId, result.status || "blocked_by_google");
+        }
         await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_completed", runIndex: index });
         logAutomationEvent("task_run_completed", { ...result, attempt: attemptNumber, maxAttempts });
         return;
       } catch (error) {
         if (isGoogleResponseCodeFailure(error)) {
           if (attemptNumber < maxAttempts) {
+            await cookiePoolService.markBroken(selectedCookies.cookiePoolId, "blocked_by_google");
             await this.repository.updateRun(task._id, index, {
               status: "queued",
               googleBlocked: true,
@@ -174,6 +263,7 @@ class TaskRunService {
             continue;
           }
 
+          await cookiePoolService.markBroken(selectedCookies.cookiePoolId, "blocked_by_google");
           await finishRun(task._id, index, {
             status: "blocked_by_google",
             googleBlocked: true,

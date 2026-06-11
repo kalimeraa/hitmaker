@@ -1,7 +1,9 @@
 const { cloakBrowser } = require("../../config/app");
+const ProxyChain = require("proxy-chain");
 
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
+const MOBILE_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36";
 const DEFAULT_CHROMIUM_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
@@ -12,7 +14,31 @@ async function loadCloakBrowser() {
   return import("cloakbrowser");
 }
 
-function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop" }) {
+function hasProxyCredentials(proxyUrl) {
+  if (!proxyUrl) return false;
+
+  try {
+    return Boolean(new URL(proxyUrl).username);
+  } catch (error) {
+    return false;
+  }
+}
+
+async function anonymizeProxyIfNeeded(proxyUrl) {
+  if (!hasProxyCredentials(proxyUrl)) {
+    return { proxyUrl, close: async () => {} };
+  }
+
+  const anonymizedProxyUrl = await ProxyChain.anonymizeProxy(proxyUrl);
+  return {
+    proxyUrl: anonymizedProxyUrl,
+    close: async () => {
+      await ProxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => {});
+    }
+  };
+}
+
+function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyGeoip = true }) {
   const isMobile = deviceMode === "mobile";
   const platformArgs = process.platform === "linux" ? DEFAULT_CHROMIUM_ARGS : [];
   const args = isMobile
@@ -26,16 +52,18 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop" }) {
   };
 
   if (isMobile) {
+    launchOptions.userAgent = MOBILE_USER_AGENT;
     launchOptions.contextOptions = {
       isMobile: true,
       hasTouch: true,
+      screen: MOBILE_VIEWPORT,
       deviceScaleFactor: 3
     };
   }
 
   if (proxyUrl) {
     launchOptions.proxy = proxyUrl;
-    launchOptions.geoip = cloakBrowser.geoip;
+    launchOptions.geoip = proxyGeoip && cloakBrowser.geoip;
   }
   if (cloakBrowser.locale) {
     launchOptions.locale = cloakBrowser.locale;
@@ -55,21 +83,40 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop" }) {
 
 async function launchBrowserContext(options) {
   const { launchContext, launchPersistentContext } = await loadCloakBrowser();
-  const launchOptions = buildLaunchOptions(options);
+  const proxy = await anonymizeProxyIfNeeded(options.proxyUrl);
+  const launchOptions = buildLaunchOptions({
+    ...options,
+    proxyUrl: proxy.proxyUrl,
+    proxyGeoip: proxy.proxyUrl === options.proxyUrl
+  });
+  let context;
 
   if (cloakBrowser.persistentProfile) {
-    return launchPersistentContext({
+    context = await launchPersistentContext({
       ...launchOptions,
       userDataDir: cloakBrowser.userDataDir
     });
+  } else {
+    context = await launchContext(launchOptions);
   }
 
-  return launchContext(launchOptions);
+  const closeContext = context.close.bind(context);
+  context.close = async (...args) => {
+    try {
+      return await closeContext(...args);
+    } finally {
+      await proxy.close();
+    }
+  };
+
+  return context;
 }
 
 module.exports = {
   DEFAULT_VIEWPORT,
   MOBILE_VIEWPORT,
+  MOBILE_USER_AGENT,
+  anonymizeProxyIfNeeded,
   buildLaunchOptions,
   launchBrowserContext
 };

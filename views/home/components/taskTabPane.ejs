@@ -71,9 +71,19 @@
               <label for="editProxyUrl" class="form-label">Proxy</label>
               <input class="form-control" id="editProxyUrl">
             </div>
-            <div>
-              <label for="editCookies" class="form-label">Cookie</label>
-              <textarea class="form-control" id="editCookies" rows="4"></textarea>
+            <div class="cookie-input-group" data-cookie-input-group="edit">
+              <label class="form-label">Cookie</label>
+              <div class="btn-group w-100 cookie-source-toggle" role="group" aria-label="Cookie kaynağı">
+                <input type="radio" class="btn-check" name="editCookieSource" id="editCookieSourceText" value="text" autocomplete="off" checked>
+                <label class="btn btn-outline-secondary" for="editCookieSourceText">Metin gir</label>
+                <input type="radio" class="btn-check" name="editCookieSource" id="editCookieSourceFile" value="file" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="editCookieSourceFile">Dosya yükle</label>
+                <input type="radio" class="btn-check" name="editCookieSource" id="editCookieSourcePool" value="pool" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="editCookieSourcePool">Havuzdan kullan</label>
+              </div>
+              <textarea class="form-control mt-2" id="editCookies" rows="4" data-cookie-text></textarea>
+              <input class="form-control mt-2 d-none" id="editCookieFile" type="file" data-cookie-file accept=".txt,.json,.cookies,text/plain,application/json" multiple>
+              <div class="form-text" data-cookie-file-name></div>
             </div>
           </div>
         </div>

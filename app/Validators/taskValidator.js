@@ -165,7 +165,7 @@ function parseCookies(value, targetAddress) {
   try {
     if (raw.startsWith("[") || raw.startsWith("{")) {
       const parsed = JSON.parse(raw);
-      cookies = Array.isArray(parsed) ? parsed : [parsed];
+      cookies = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.cookies) ? parsed.cookies : [parsed]);
     } else {
       cookies = parseCookieHeaderPairs(raw, targetHost);
     }
@@ -182,12 +182,52 @@ function parseCookies(value, targetAddress) {
       value: String(cookie.value),
       domain: cookie.domain ? String(cookie.domain) : targetHost,
       path: cookie.path ? String(cookie.path) : "/",
-      expires: cookie.expires ? Number(cookie.expires) : undefined,
+      expires: Number(cookie.expires) > 0 ? Number(cookie.expires) : undefined,
       httpOnly: Boolean(cookie.httpOnly),
       secure: Boolean(cookie.secure),
       sameSite: cookie.sameSite ? String(cookie.sameSite) : undefined
     };
   }).slice(0, 100);
+}
+
+function parseCookieSets(value, targetAddress) {
+  const rawSets = Array.isArray(value) ? value : [];
+
+  return rawSets
+    .slice(0, 50)
+    .map((cookieSet, index) => {
+      const name = normalizeOptionalText(cookieSet && cookieSet.name) || `cookie-set-${index + 1}`;
+      const source = typeof cookieSet.content !== "undefined"
+        ? cookieSet.content
+        : JSON.stringify(cookieSet.cookies || []);
+      return {
+        name: name.slice(0, 180),
+        cookies: parseCookies(source, targetAddress)
+      };
+    })
+    .filter((cookieSet) => cookieSet.cookies.length);
+}
+
+function parseCookiePayload(body, targetAddress) {
+  const explicitCookieSets = parseCookieSets(body.cookieSets, targetAddress);
+  if (explicitCookieSets.length) {
+    return { cookies: [], cookieSets: explicitCookieSets };
+  }
+
+  const raw = normalizeOptionalText(body.cookies);
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      const embeddedCookieSets = parseCookieSets(parsed.cookieSets, targetAddress);
+      if (embeddedCookieSets.length) {
+        return { cookies: [], cookieSets: embeddedCookieSets };
+      }
+    } catch (error) {
+      throw new HttpError(400, `Invalid cookies: ${error.message}`);
+    }
+  }
+
+  return { cookies: parseCookies(body.cookies, targetAddress), cookieSets: [] };
 }
 
 function validateCreateTaskPayload(body) {
@@ -207,6 +247,8 @@ function validateCreateTaskPayload(body) {
     throw new HttpError(400, "Target address must be a valid domain or URL");
   }
 
+  const cookiePayload = parseCookiePayload(body, targetAddress);
+
   return {
     keywords,
     count,
@@ -216,8 +258,14 @@ function validateCreateTaskPayload(body) {
     headless: Boolean(body.headless),
     deviceMode: parseDeviceMode(body.deviceMode),
     proxyUrl: normalizeProxyUrl(body.proxyUrl),
-    cookies: parseCookies(body.cookies, targetAddress)
+    useCookiePool: Boolean(body.useCookiePool),
+    cookies: cookiePayload.cookies,
+    cookieSets: cookiePayload.cookieSets
   };
 }
 
-module.exports = { validateCreateTaskPayload };
+module.exports = {
+  validateCreateTaskPayload,
+  parseCookieSets,
+  normalizeOptionalText
+};

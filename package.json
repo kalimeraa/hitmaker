@@ -23,6 +23,7 @@
     "mmdb-lib": "^3.0.2",
     "mongoose": "^8.9.5",
     "playwright-core": "^1.60.0",
+    "proxy-chain": "^3.0.0",
     "winston": "^3.19.0"
   }
 }

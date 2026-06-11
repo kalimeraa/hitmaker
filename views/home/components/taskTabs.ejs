@@ -6,11 +6,15 @@
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#logsPane" type="button">Loglar</button>
   </li>
   <li class="nav-item" role="presentation">
+    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#cookiesPane" type="button">Cookieler</button>
+  </li>
+  <li class="nav-item" role="presentation">
     <button class="nav-link" data-bs-toggle="tab" data-bs-target="#errorsPane" type="button">Hatalar</button>
   </li>
 </ul>
 <div class="tab-content">
   <%- include("taskTabPane") %>
   <%- include("logTabPane") %>
+  <%- include("cookieTabPane") %>
   <%- include("errorTabPane") %>
 </div>

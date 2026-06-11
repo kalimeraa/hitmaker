@@ -37,6 +37,16 @@ function isGoogleResponseCodeFailure(error) {
   return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
 }
 
+function proxyHost(proxyUrl) {
+  if (!proxyUrl) return "";
+
+  try {
+    return new URL(proxyUrl).host;
+  } catch (error) {
+    return "";
+  }
+}
+
 async function runCancellable(action, shouldCancel) {
   let intervalId;
   const cancellation = new Promise((_, reject) => {
@@ -109,6 +119,29 @@ async function holdVisibleFailurePage(page, headless, onEvent, shouldCancel) {
   await runCancellable(() => page.waitForTimeout(10000), shouldCancel).catch(() => {});
 }
 
+async function logProxyExitIp(page, proxyUrl, onEvent, shouldCancel) {
+  if (!proxyUrl) return;
+
+  const checkUrl = "https://api.ipify.org?format=json";
+  try {
+    await onEvent("browser_proxy_exit_ip_check_started", { proxyHost: proxyHost(proxyUrl), checkUrl });
+    await runCancellable(() => page.goto(checkUrl, { waitUntil: "domcontentloaded", timeout: 10000 }), shouldCancel);
+    const bodyText = await runCancellable(() => page.locator("body").innerText({ timeout: 5000 }), shouldCancel);
+    const parsed = JSON.parse(bodyText);
+    await onEvent("browser_proxy_exit_ip_checked", {
+      proxyHost: proxyHost(proxyUrl),
+      exitIp: parsed.ip || "",
+      checkUrl
+    });
+  } catch (error) {
+    await onEvent("browser_proxy_exit_ip_check_failed", {
+      proxyHost: proxyHost(proxyUrl),
+      error: error.message,
+      url: page.url()
+    });
+  }
+}
+
 async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
   const target = normalizeTarget(targetAddress);
   const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
@@ -119,7 +152,8 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMo
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     const searchUrl = buildGoogleSearchUrl(keyword);
-    await onEvent("browser_context_started", { keyword, targetAddress, target, deviceMode });
+    await onEvent("browser_context_started", { keyword, targetAddress, target, deviceMode, hasProxy: Boolean(proxyUrl), proxyHost: proxyHost(proxyUrl) });
+    await logProxyExitIp(page, proxyUrl, onEvent, shouldCancel);
     await applyCookies(context, cookies, target.host);
     if ((cookies || []).length) {
       const googleCookies = await context.cookies("https://www.google.com").catch(() => []);
