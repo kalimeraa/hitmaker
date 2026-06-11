@@ -44,6 +44,7 @@ const taskSchema = new mongoose.Schema(
     maxAttempts: { type: Number, default: 3, min: 1, max: 10 },
     durationHours: { type: Number, default: 0, min: 0 },
     headless: { type: Boolean, default: true },
+    deviceMode: { type: String, enum: ["desktop", "mobile"], default: "desktop" },
     proxyUrl: String,
     cookies: [
       new mongoose.Schema(

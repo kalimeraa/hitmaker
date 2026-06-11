@@ -33,6 +33,10 @@ async function neverCancelled() {
   return false;
 }
 
+function isGoogleResponseCodeFailure(error) {
+  return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
+}
+
 async function runCancellable(action, shouldCancel) {
   let intervalId;
   const cancellation = new Promise((_, reject) => {
@@ -98,9 +102,16 @@ async function scrollTargetPageLikeHuman(page, onEvent, shouldCancel) {
   await onEvent("target_human_scroll_completed", { url: page.url() });
 }
 
-async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
+async function holdVisibleFailurePage(page, headless, onEvent, shouldCancel) {
+  if (headless) return;
+
+  await onEvent("visible_failure_hold_started", { url: page.url() });
+  await runCancellable(() => page.waitForTimeout(10000), shouldCancel).catch(() => {});
+}
+
+async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
   const target = normalizeTarget(targetAddress);
-  const context = await launchBrowserContext({ headless, proxyUrl });
+  const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
 
   try {
     const page = await context.newPage();
@@ -108,7 +119,7 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     const searchUrl = buildGoogleSearchUrl(keyword);
-    await onEvent("browser_context_started", { keyword, targetAddress, target });
+    await onEvent("browser_context_started", { keyword, targetAddress, target, deviceMode });
     await applyCookies(context, cookies, target.host);
     if ((cookies || []).length) {
       const googleCookies = await context.cookies("https://www.google.com").catch(() => []);
@@ -119,7 +130,23 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, proxyUrl
       });
     }
     await onEvent("google_search_navigation_started", { searchUrl });
-    await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
+    try {
+      await runCancellable(() => page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs }), shouldCancel);
+    } catch (error) {
+      await onEvent("google_search_navigation_failed", {
+        searchUrl,
+        url: page.url(),
+        error: error.message,
+        googleBlocked: isGoogleResponseCodeFailure(error)
+      });
+      await holdVisibleFailurePage(page, headless, onEvent, shouldCancel);
+
+      if (isGoogleResponseCodeFailure(error)) {
+        return { status: "blocked_by_google", matchedUrl: null, resultPage: null, googleBlocked: true };
+      }
+
+      throw error;
+    }
     await acceptConsentIfPresent(page);
 
     const { matchedUrl, resultPage, resultRank, blockedByGoogle } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);

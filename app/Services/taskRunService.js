@@ -39,6 +39,10 @@ function shouldRetryFailure(error) {
   return !String(error.message || "").includes("Task cancelled");
 }
 
+function isGoogleResponseCodeFailure(error) {
+  return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
+}
+
 class TaskRunService {
   constructor(repository = taskRepository, browserAutomation = runGoogleSearchClick, scheduleService = runScheduleService, cancellationService = taskCancellationService) {
     this.repository = repository;
@@ -85,6 +89,7 @@ class TaskRunService {
           keyword: run.keyword,
           targetAddress: task.targetAddress,
           headless: task.headless,
+          deviceMode: task.deviceMode || "desktop",
           proxyUrl: task.proxyUrl,
           cookies: task.cookies,
           onEvent: async (event, meta = {}) => {
@@ -105,6 +110,12 @@ class TaskRunService {
               await this.repository.updateRun(task._id, index, {
                 lastGoogleUrl: meta.url,
                 googleBlocked: true
+              });
+            }
+            if (event === "google_search_navigation_failed") {
+              await this.repository.updateRun(task._id, index, {
+                lastGoogleUrl: meta.url || meta.searchUrl,
+                googleBlocked: Boolean(meta.googleBlocked)
               });
             }
             if (event === "google_results_candidates_seen") {
@@ -150,6 +161,30 @@ class TaskRunService {
         logAutomationEvent("task_run_completed", { ...result, attempt: attemptNumber, maxAttempts });
         return;
       } catch (error) {
+        if (isGoogleResponseCodeFailure(error)) {
+          if (attemptNumber < maxAttempts) {
+            await this.repository.updateRun(task._id, index, {
+              status: "queued",
+              googleBlocked: true,
+              error: `attempt ${attemptNumber}/${maxAttempts} blocked_by_google`,
+              finishedAt: new Date()
+            });
+            await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_auto_retry_queued", runIndex: index });
+            logAutomationEvent("task_run_auto_retry_queued", { attempt: attemptNumber, maxAttempts, status: "blocked_by_google", error: error.message });
+            continue;
+          }
+
+          await finishRun(task._id, index, {
+            status: "blocked_by_google",
+            googleBlocked: true,
+            error: error.message,
+            finishedAt: new Date()
+          });
+          await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_completed", runIndex: index });
+          logAutomationEvent("task_run_completed", { status: "blocked_by_google", googleBlocked: true, error: error.message, attempt: attemptNumber, maxAttempts });
+          return;
+        }
+
         if (shouldRetryFailure(error) && attemptNumber < maxAttempts) {
           await this.repository.updateRun(task._id, index, {
             status: "queued",

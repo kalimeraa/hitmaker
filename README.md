@@ -120,7 +120,7 @@ Script davranışı:
 - `MAX_PARALLEL_BROWSERS=1` olur; görünür browser testinde pencereler üst üste binmez.
 - App ve worker aynı terminalden başlar. Ctrl+C veya `killall node` ikisini de kapatır.
 
-Görünür browser modunda CloakBrowser Chromium `--start-maximized` ile açılır ve viewport gerçek pencere boyutuna bırakılır.
+Görünür desktop modunda CloakBrowser Chromium `--start-maximized` ile açılır ve viewport gerçek pencere boyutuna bırakılır. Mobil ekran seçilirse pencere `390x844` açılır ve context mobil viewport/touch ayarlarıyla başlar.
 
 ## Docker
 
@@ -209,9 +209,9 @@ Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `
 - `CLOAKBROWSER_TIMEZONE`: CloakBrowser timezone ayarı. Örnek: `Europe/Istanbul`.
 - `CLOAKBROWSER_HUMANIZE`: `true` ise CloakBrowser humanize davranış katmanı etkinleşir.
 - `CLOAKBROWSER_HUMAN_PRESET`: `default` veya `careful`.
-- `CLOAKBROWSER_PERSISTENT_PROFILE`: `true` ise browser incognito context yerine kalıcı profil ile açılır. Varsayılan `true`.
+- `CLOAKBROWSER_PERSISTENT_PROFILE`: `true` ise browser incognito/ephemeral context yerine kalıcı profil ile açılır. Varsayılan `false`; her run temiz stealth context ile başlar.
 - `CLOAKBROWSER_USER_DATA_DIR`: Kalıcı browser profil dizini. Varsayılan proje içinde `storage/browser-profile`.
-- Kalıcı profil aynı anda tek browser tarafından kullanılmalıdır; normal profil davranışı için `MAX_PARALLEL_BROWSERS=1` önerilir.
+- Kalıcı profil açılırsa aynı anda tek browser tarafından kullanılmalıdır; bu mod için `MAX_PARALLEL_BROWSERS=1` önerilir.
 - `CLOAKBROWSER_BINARY_PATH`: İndirme yerine lokal binary kullanmak için CloakBrowser env değişkeni.
 - `CLOAKBROWSER_CACHE_DIR`: Binary cache dizini.
 - `CLOAKBROWSER_AUTO_UPDATE`: CloakBrowser auto-update kontrolü.
@@ -228,6 +228,7 @@ Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `
   "maxAttempts": 3,
   "durationHours": 0,
   "headless": true,
+  "deviceMode": "desktop",
   "proxyUrl": "",
   "cookies": ""
 }
@@ -242,6 +243,7 @@ Alanlar:
 - `maxAttempts`: Opsiyonel. Laravel job `tries` benzeri run deneme sayısıdır. `1-10` arası kabul edilir, varsayılan `3`'tür. `tries` alias olarak kabul edilir.
 - `durationHours`: Opsiyonel. `0-720` arası saat. `0` ise run'lar hemen başlar.
 - `headless`: Boolean. Docker için genellikle `true` kullanılmalıdır.
+- `deviceMode`: Opsiyonel. `desktop` veya `mobile`; mobil seçilirse browser mobil viewport ve touch ayarlarıyla açılır.
 - `proxyUrl`: Opsiyonel. `http://user:pass@host:port`, `https://host:port`, `socks4://host:port` veya `socks5://host:port`.
 - `cookies`: Opsiyonel. Satır satır `name=value`, JSON cookie objesi veya JSON cookie array'i.
 

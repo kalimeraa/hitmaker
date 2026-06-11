@@ -6,7 +6,7 @@ function optionalBoolean(value) {
   return String(value).toLowerCase() === "true";
 }
 
-const cloakBrowserPersistentProfile = optionalBoolean(process.env.CLOAKBROWSER_PERSISTENT_PROFILE) ?? true;
+const cloakBrowserPersistentProfile = optionalBoolean(process.env.CLOAKBROWSER_PERSISTENT_PROFILE) ?? false;
 const maxTaskTimeoutMs = 60000;
 const configuredTaskTimeoutMs = Number(process.env.TASK_TIMEOUT_MS || maxTaskTimeoutMs);
 const isRailwayRuntime = Boolean(process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_PROJECT_ID);

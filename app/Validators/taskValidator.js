@@ -50,6 +50,15 @@ function parseMaxAttempts(value) {
   return maxAttempts;
 }
 
+function parseDeviceMode(value) {
+  const deviceMode = normalizeOptionalText(value || "desktop").toLowerCase();
+  if (!["desktop", "mobile"].includes(deviceMode)) {
+    throw new HttpError(400, "Device mode must be desktop or mobile");
+  }
+
+  return deviceMode;
+}
+
 function extractCookieText(value) {
   const raw = normalizeOptionalText(value);
   const cookieOption = raw.match(/(?:^|\s)(?:-b|--cookie)\s+(['"])([\s\S]*?)\1/);
@@ -205,6 +214,7 @@ function validateCreateTaskPayload(body) {
     durationHours: parseDurationHours(body.durationHours),
     targetAddress,
     headless: Boolean(body.headless),
+    deviceMode: parseDeviceMode(body.deviceMode),
     proxyUrl: normalizeProxyUrl(body.proxyUrl),
     cookies: parseCookies(body.cookies, targetAddress)
   };

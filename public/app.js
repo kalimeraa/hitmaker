@@ -140,6 +140,7 @@ function showTaskEditModal(taskId) {
   $("#editDurationHours").val(Number(task.durationHours || 0));
   $("#editMaxAttempts").val(Number(task.maxAttempts || 3));
   $("#editHeadless").prop("checked", Boolean(task.headless));
+  $("#editDeviceMode").val(task.deviceMode || "desktop");
   $("#editProxyUrl").val(cleanOptionalText(task.proxyUrl));
   $("#editCookies").val((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : "");
   taskEditModal.show();
@@ -153,6 +154,7 @@ function readTaskEditPayload() {
     maxAttempts: Number($("#editMaxAttempts").val()),
     durationHours: Number($("#editDurationHours").val()),
     headless: $("#editHeadless").is(":checked"),
+    deviceMode: $("#editDeviceMode").val(),
     proxyUrl: cleanOptionalText($("#editProxyUrl").val()),
     cookies: cleanOptionalText($("#editCookies").val())
   };
@@ -220,7 +222,7 @@ function renderTask(task) {
         </div>
       </div>
       <div class="task-meta mt-2">
-        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
+        ${task.count} click · ${Number(task.durationHours || 0)} saat · ${task.headless ? "headless" : "visible"} · ${task.deviceMode || "desktop"} · ${task.proxyUrl ? "proxy" : "direct"} · ${(task.cookies || []).length} cookie · ${new Date(task.createdAt).toLocaleString()}
         · retry ${task.maxAttempts || 3}
       </div>
       <div class="progress mt-3" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
@@ -335,6 +337,7 @@ $("#taskForm").on("submit", async function (event) {
         maxAttempts: Number($("#maxAttempts").val()),
         durationHours: Number($("#durationHours").val()),
         headless: $("#headless").is(":checked"),
+        deviceMode: $("#deviceMode").val(),
         proxyUrl: cleanOptionalText($("#proxyUrl").val()),
         cookies: cleanOptionalText($("#cookies").val())
       })

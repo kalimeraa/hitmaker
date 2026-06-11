@@ -52,9 +52,20 @@
                 <input class="form-control" id="editMaxAttempts" type="number" min="1" max="10">
               </div>
             </div>
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" role="switch" id="editHeadless">
-              <label class="form-check-label" for="editHeadless">Headless</label>
+            <div class="row g-3 align-items-end">
+              <div class="col-md-6">
+                <label for="editDeviceMode" class="form-label">Ekran</label>
+                <select class="form-select" id="editDeviceMode">
+                  <option value="desktop">Desktop</option>
+                  <option value="mobile">Mobil</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" role="switch" id="editHeadless">
+                  <label class="form-check-label" for="editHeadless">Headless</label>
+                </div>
+              </div>
             </div>
             <div>
               <label for="editProxyUrl" class="form-label">Proxy</label>
