@@ -1,5 +1,6 @@
 param(
-  [switch]$InstallDependencies
+  [switch]$InstallDependencies,
+  [switch]$VerifyOnly
 )
 
 Set-StrictMode -Version Latest
@@ -204,6 +205,54 @@ function Stop-ProcessTree {
   & taskkill.exe /PID $Process.Id /T /F | Out-Null
 }
 
+function Invoke-JavaScriptSyntaxCheck {
+  $files = Get-ChildItem -Path $RootDir -Recurse -Filter "*.js" -File |
+    Where-Object {
+      $_.FullName -notlike "*\node_modules\*" -and
+      $_.FullName -notlike "*\.git\*"
+    }
+
+  foreach ($file in $files) {
+    & node.exe --check $file.FullName
+    if ($LASTEXITCODE -ne 0) {
+      throw "JavaScript syntax kontrolu basarisiz: $($file.FullName)"
+    }
+  }
+}
+
+function Invoke-WindowsVerification {
+  Write-Host "Windows dogrulama basladi"
+  Write-Host "Node: $(& node.exe --version)"
+  Write-Host "npm: $(& npm.cmd --version)"
+
+  Write-Host "JavaScript syntax kontrolu"
+  Invoke-JavaScriptSyntaxCheck
+
+  Write-Host "CloakBrowser kontrolu"
+  & npm.cmd run browser:info
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm run browser:info basarisiz oldu. Exit code: $LASTEXITCODE"
+  }
+
+  Write-Host "Browser kapasite onerisi"
+  & node.exe -e "const service=require('./app/Services/systemCapacityService'); console.log(JSON.stringify(service.browserCapacity()));"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Browser kapasite kontrolu basarisiz oldu. Exit code: $LASTEXITCODE"
+  }
+
+  Write-Host "Redis port kontrolu: ${env:REDIS_HOST}:${env:REDIS_PORT}"
+  if (-not (Test-PortOpen -HostName $env:REDIS_HOST -Port ([int]$env:REDIS_PORT))) {
+    throw "Redis/Memurai portu kapali: ${env:REDIS_HOST}:${env:REDIS_PORT}"
+  }
+
+  Write-Host "MongoDB port kontrolu: ${MongoHost}:${MongoPort}"
+  if (-not (Test-PortOpen -HostName $MongoHost -Port $MongoPort)) {
+    throw "MongoDB portu kapali: ${MongoHost}:${MongoPort}"
+  }
+
+  Write-Host "Dogrulama tamam: OK"
+}
+
 Ensure-CommandAvailable -CommandName "node.exe" -Label "Node.js LTS" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 Ensure-CommandAvailable -CommandName "npm.cmd" -Label "npm" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 
@@ -257,6 +306,11 @@ Write-Host "Mongo: $env:MONGODB_URI"
 Write-Host "Redis: ${env:REDIS_HOST}:${env:REDIS_PORT}"
 Write-Host "Headless default: $env:HEADLESS_DEFAULT"
 Write-Host ""
+
+if ($VerifyOnly) {
+  Invoke-WindowsVerification
+  return
+}
 
 $AppProcess = $null
 $WorkerProcess = $null

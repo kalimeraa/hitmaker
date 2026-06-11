@@ -138,6 +138,12 @@ Node paketleri, CloakBrowser Chromium, MongoDB ve Redis/Memurai kurulumu da dene
 .\startwindows.ps1 -InstallDependencies
 ```
 
+Kurulumdan sonra app'i başlatmadan doğrulama yapmak için:
+
+```powershell
+.\startwindows.ps1 -VerifyOnly
+```
+
 Command Prompt veya çift tıklama için:
 
 ```bat
@@ -150,6 +156,12 @@ Command Prompt ile otomatik kurulum:
 startwindows.cmd -InstallDependencies
 ```
 
+Command Prompt ile doğrulama:
+
+```bat
+startwindows.cmd -VerifyOnly
+```
+
 Git Bash/WSL içinden Windows PowerShell'i çağırmak için:
 
 ```bash
@@ -159,6 +171,7 @@ Git Bash/WSL içinden Windows PowerShell'i çağırmak için:
 Script davranışı:
 
 - `-InstallDependencies` verilirse `winget`, yoksa Chocolatey ile Node.js LTS, MongoDB ve Memurai Developer kurmayı dener.
+- `-VerifyOnly` verilirse app/worker başlatmadan Node, npm, JS syntax, CloakBrowser, Redis/Memurai portu, MongoDB portu ve browser kapasite önerisini kontrol eder.
 - `node_modules` yoksa `npm install` çalıştırır.
 - `npm run browser:install` ile CloakBrowser Chromium indirmeyi dener.
 - Redis için `Redis` veya `Memurai` Windows service adlarını başlatmayı dener.
