@@ -143,11 +143,31 @@ Docker Compose servisleri:
 
 Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build sırasında `npx cloakbrowser install` ile CloakBrowser Chromium binary'sini indirir. `CLOAKBROWSER_AUTO_UPDATE=false` kullanılır; binary kontrolsüz şekilde runtime'da güncellenmez.
 
+## Railway
+
+Railway Dockerfile deploy'unda container içinde Redis veya MongoDB otomatik başlamaz. Railway projesine ayrı Redis ve MongoDB servisleri eklenmeli, app servisinde bu servislerin bağlantı değişkenleri kullanılmalıdır.
+
+Gerekli app değişkenleri:
+
+```text
+MONGODB_URI=<Railway MongoDB connection string>
+REDIS_URL=<Railway Redis connection string>
+QUEUE_NAME=browser-tasks
+HEADLESS_DEFAULT=true
+MAX_PARALLEL_BROWSERS=1
+CLOAKBROWSER_AUTO_UPDATE=false
+```
+
+`REDIS_URL` verilirse `REDIS_HOST`, `REDIS_PORT` ve `REDIS_PASSWORD` yerine geçer. Railway Redis bağlantısı `redis://...` veya TLS gerekiyorsa `rediss://...` formatında olabilir.
+
+Worker ayrı bir Railway servis/process olarak çalışmalıdır. Web servis `npm start` ile Express uygulamasını, worker servis `npm run worker` ile BullMQ worker'ını çalıştırır. Sadece web container'ı deploy edilirse task oluşturulur ama queue job'ları işlenmez.
+
 ## Ortam Değişkenleri
 
 - `PORT`: Express portu. Varsayılan `3000`.
 - `HEADLESS_DEFAULT`: UI formundaki `Headless` switch varsayılanı. `./start.sh` bunu `false` yapar.
 - `MONGODB_URI`: MongoDB bağlantısı.
+- `REDIS_URL`: Redis bağlantı URL'i. Verilirse host/port/password ayarlarının yerine kullanılır.
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: Redis bağlantısı.
 - `QUEUE_NAME`: BullMQ queue adı.
 - `AUTH_USERNAME`: Panel kullanıcı adı. Varsayılan `hitmaker`.

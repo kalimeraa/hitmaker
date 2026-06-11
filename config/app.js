@@ -10,16 +10,33 @@ const cloakBrowserPersistentProfile = optionalBoolean(process.env.CLOAKBROWSER_P
 const maxTaskTimeoutMs = 60000;
 const configuredTaskTimeoutMs = Number(process.env.TASK_TIMEOUT_MS || maxTaskTimeoutMs);
 
-module.exports = {
-  port: Number(process.env.PORT || 3000),
-  headlessDefault: optionalBoolean(process.env.HEADLESS_DEFAULT) ?? true,
-  mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/hitmaker",
-  redis: {
+function buildRedisConfig() {
+  if (process.env.REDIS_URL) {
+    const redisUrl = new URL(process.env.REDIS_URL);
+
+    return {
+      host: redisUrl.hostname,
+      port: Number(redisUrl.port || 6379),
+      username: redisUrl.username ? decodeURIComponent(redisUrl.username) : undefined,
+      password: redisUrl.password ? decodeURIComponent(redisUrl.password) : undefined,
+      tls: redisUrl.protocol === "rediss:" ? {} : undefined,
+      maxRetriesPerRequest: null
+    };
+  }
+
+  return {
     host: process.env.REDIS_HOST || "localhost",
     port: Number(process.env.REDIS_PORT || 6379),
     password: process.env.REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null
-  },
+  };
+}
+
+module.exports = {
+  port: Number(process.env.PORT || 3000),
+  headlessDefault: optionalBoolean(process.env.HEADLESS_DEFAULT) ?? true,
+  mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/hitmaker",
+  redis: buildRedisConfig(),
   queueName: process.env.QUEUE_NAME || "browser-tasks",
   auth: {
     username: process.env.AUTH_USERNAME || "hitmaker",
