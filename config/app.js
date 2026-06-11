@@ -9,6 +9,7 @@ function optionalBoolean(value) {
 const cloakBrowserPersistentProfile = optionalBoolean(process.env.CLOAKBROWSER_PERSISTENT_PROFILE) ?? true;
 const maxTaskTimeoutMs = 60000;
 const configuredTaskTimeoutMs = Number(process.env.TASK_TIMEOUT_MS || maxTaskTimeoutMs);
+const isRailwayRuntime = Boolean(process.env.RAILWAY_ENVIRONMENT_ID || process.env.RAILWAY_PROJECT_ID);
 
 function buildMongoUri() {
   return process.env.MONGODB_URI
@@ -18,8 +19,12 @@ function buildMongoUri() {
 }
 
 function buildRedisConfig() {
-  if (process.env.REDIS_URL) {
-    const redisUrl = new URL(process.env.REDIS_URL);
+  const redisConnectionUrl = process.env.REDIS_URL
+    || process.env.REDIS_PRIVATE_URL
+    || process.env.REDIS_PUBLIC_URL;
+
+  if (redisConnectionUrl) {
+    const redisUrl = new URL(redisConnectionUrl);
 
     return {
       host: redisUrl.hostname,
@@ -31,12 +36,19 @@ function buildRedisConfig() {
     };
   }
 
-  return {
-    host: process.env.REDIS_HOST || "localhost",
-    port: Number(process.env.REDIS_PORT || 6379),
-    password: process.env.REDIS_PASSWORD || undefined,
+  const redisConfig = {
+    host: process.env.REDIS_HOST || process.env.REDISHOST || "localhost",
+    port: Number(process.env.REDIS_PORT || process.env.REDISPORT || 6379),
+    username: process.env.REDIS_USERNAME || process.env.REDISUSER || undefined,
+    password: process.env.REDIS_PASSWORD || process.env.REDISPASSWORD || undefined,
     maxRetriesPerRequest: null
   };
+
+  if (isRailwayRuntime && ["localhost", "127.0.0.1", "::1"].includes(redisConfig.host)) {
+    throw new Error("Railway Redis config missing. Set REDIS_URL or REDIS_PRIVATE_URL in Railway service variables.");
+  }
+
+  return redisConfig;
 }
 
 module.exports = {

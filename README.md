@@ -156,7 +156,7 @@ Dockerfile, Playwright dependency'leri hazır Node imajını kullanır ve build 
 
 ## Railway
 
-Railway Dockerfile deploy'unda container içinde Redis veya MongoDB otomatik başlamaz. Railway projesine ayrı Redis ve MongoDB servisleri eklenmeli, app servisinde bu servislerin bağlantı değişkenleri kullanılmalıdır.
+Railway Dockerfile deploy'unda `docker-compose.yml` kullanılmaz ve `.env` dosyası image içine kopyalanmaz. Container içinde Redis veya MongoDB otomatik başlamaz. Railway projesine ayrı Redis ve MongoDB servisleri eklenmeli, app servisinde bu servislerin bağlantı değişkenleri Railway Variables ekranından verilmelidir.
 
 Gerekli app değişkenleri:
 
@@ -169,7 +169,7 @@ MAX_PARALLEL_BROWSERS=1
 CLOAKBROWSER_AUTO_UPDATE=false
 ```
 
-`REDIS_URL` verilirse `REDIS_HOST`, `REDIS_PORT` ve `REDIS_PASSWORD` yerine geçer. Railway Redis bağlantısı `redis://...` veya TLS gerekiyorsa `rediss://...` formatında olabilir.
+`REDIS_URL` verilirse `REDIS_HOST`, `REDIS_PORT` ve `REDIS_PASSWORD` yerine geçer. Railway Redis bağlantısı `redis://...` veya TLS gerekiyorsa `rediss://...` formatında olabilir. Railway Redis servisinde bağlantı `REDIS_PRIVATE_URL` veya `REDIS_PUBLIC_URL` olarak gelirse uygulama bunları da fallback olarak okur. `REDISHOST`, `REDISPORT`, `REDISUSER` ve `REDISPASSWORD` alias'ları da desteklenir.
 
 MongoDB bağlantısı için tercih edilen değişken `MONGODB_URI`'dir. Railway Mongo servisinde değişken adı `MONGO_URL` veya `MONGO_PRIVATE_URL` olarak gelirse uygulama bunları da fallback olarak okur. Deploy ortamında `mongodb://localhost:27017/hitmaker` kullanılmamalıdır; bu adres container'ın kendi içini gösterir.
 
