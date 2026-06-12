@@ -7,6 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$MongoDbChocolateyVersion = "7.0.35"
 Set-Location $RootDir
 
 function Get-EnvOrDefault {
@@ -27,6 +28,58 @@ function Update-ProcessPath {
   $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
   $env:Path = "$machinePath;$userPath"
+}
+
+function Find-ChocolateyPath {
+  $command = Get-Command choco.exe -ErrorAction SilentlyContinue
+  if ($null -ne $command) {
+    return $command.Source
+  }
+
+  $chocoPath = Join-Path $env:ProgramData "chocolatey\bin\choco.exe"
+  if (Test-Path $chocoPath) {
+    return $chocoPath
+  }
+
+  return ""
+}
+
+function Join-ExistingPath {
+  param(
+    [string]$BasePath,
+    [Parameter(Mandatory = $true)][string]$ChildPath
+  )
+
+  if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    return ""
+  }
+
+  return Join-Path $BasePath $ChildPath
+}
+
+function Resolve-BrowserBinaryPath {
+  if (-not [string]::IsNullOrWhiteSpace($env:CLOAKBROWSER_BINARY_PATH)) {
+    if (Test-Path $env:CLOAKBROWSER_BINARY_PATH) {
+      return $env:CLOAKBROWSER_BINARY_PATH
+    }
+    throw "CLOAKBROWSER_BINARY_PATH verildi ama dosya bulunamadi: $env:CLOAKBROWSER_BINARY_PATH"
+  }
+
+  $candidatePaths = @(
+    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath $env:LocalAppData -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Microsoft\Edge\Application\msedge.exe"),
+    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe")
+  )
+
+  foreach ($candidatePath in $candidatePaths) {
+    if (-not [string]::IsNullOrWhiteSpace($candidatePath) -and (Test-Path $candidatePath)) {
+      return $candidatePath
+    }
+  }
+
+  return ""
 }
 
 function Test-IsAdministrator {
@@ -73,7 +126,8 @@ function Invoke-PackageInstall {
   param(
     [Parameter(Mandatory = $true)][string]$Label,
     [Parameter(Mandatory = $true)][string]$WingetId,
-    [Parameter(Mandatory = $true)][string]$ChocolateyPackage
+    [Parameter(Mandatory = $true)][string]$ChocolateyPackage,
+    [string]$ChocolateyVersion = ""
   )
 
   if (-not (Test-IsAdministrator)) {
@@ -93,10 +147,15 @@ function Invoke-PackageInstall {
 
   Install-DotNet48
 
-  $choco = Get-Command choco.exe -ErrorAction SilentlyContinue
-  if ($null -ne $choco) {
-    Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
-    & choco.exe install $ChocolateyPackage -y --no-progress
+  $choco = Find-ChocolateyPath
+  if (-not [string]::IsNullOrWhiteSpace($choco)) {
+    Write-Host "$Label kuruluyor: choco $ChocolateyPackage $ChocolateyVersion"
+    $arguments = @("install", $ChocolateyPackage, "-y", "--no-progress")
+    if (-not [string]::IsNullOrWhiteSpace($ChocolateyVersion)) {
+      $arguments += "--version=$ChocolateyVersion"
+      $arguments += "--allow-downgrade"
+    }
+    & $choco @arguments
     if ($LASTEXITCODE -ne 0) {
       throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
     }
@@ -203,7 +262,8 @@ function Ensure-ServicePort {
     [Parameter(Mandatory = $true)][string]$Label,
     [Parameter(Mandatory = $true)][string[]]$ServiceNames,
     [Parameter(Mandatory = $true)][string]$WingetId,
-    [Parameter(Mandatory = $true)][string]$ChocolateyPackage
+    [Parameter(Mandatory = $true)][string]$ChocolateyPackage,
+    [string]$ChocolateyVersion = ""
   )
 
   if (Test-PortOpen -HostName $HostName -Port $Port) {
@@ -218,7 +278,7 @@ function Ensure-ServicePort {
   }
 
   if ($InstallDependencies) {
-    Invoke-PackageInstall -Label $Label -WingetId $WingetId -ChocolateyPackage $ChocolateyPackage
+    Invoke-PackageInstall -Label $Label -WingetId $WingetId -ChocolateyPackage $ChocolateyPackage -ChocolateyVersion $ChocolateyVersion
     Start-Sleep -Seconds 5
     [void](Start-KnownService -Label $Label -ServiceNames $ServiceNames)
     Start-Sleep -Seconds 2
@@ -345,15 +405,21 @@ if (-not (Test-Path (Join-Path $RootDir "node_modules"))) {
 }
 
 if ($InstallDependencies) {
-  Write-Host "CloakBrowser Chromium kontrol ediliyor/indiriliyor"
-  & npm.cmd run browser:install
-  if ($LASTEXITCODE -ne 0) {
-    throw "npm run browser:install basarisiz oldu. Exit code: $LASTEXITCODE"
+  $resolvedBrowserBinaryPath = Resolve-BrowserBinaryPath
+  if (-not [string]::IsNullOrWhiteSpace($resolvedBrowserBinaryPath)) {
+    $env:CLOAKBROWSER_BINARY_PATH = $resolvedBrowserBinaryPath
+    Write-Host "Lokal Chromium/Chrome kullaniliyor, CloakBrowser zip indirilmeyecek: $resolvedBrowserBinaryPath"
+  } else {
+    Write-Host "CloakBrowser Chromium kontrol ediliyor/indiriliyor"
+    & npm.cmd run browser:install
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm run browser:install basarisiz oldu. Exit code: $LASTEXITCODE"
+    }
   }
 }
 
 Ensure-RedisServicePort
-Ensure-ServicePort -HostName $MongoHost -Port $MongoPort -Label "MongoDB" -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+Ensure-ServicePort -HostName $MongoHost -Port $MongoPort -Label "MongoDB" -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb" -ChocolateyVersion $MongoDbChocolateyVersion
 
 $env:PORT = [string]$AppPort
 $env:MONGODB_URI = $MongoUri
