@@ -123,6 +123,7 @@ function Invoke-ChocolateyInstaller {
   $arguments = @("install", $ChocolateyPackage, "-y", "--no-progress")
   if (-not [string]::IsNullOrWhiteSpace($Version)) {
     $arguments += "--version=$Version"
+    $arguments += "--allow-downgrade"
   }
   & choco.exe @arguments
   if ($LASTEXITCODE -ne 0) {
