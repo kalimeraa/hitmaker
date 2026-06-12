@@ -210,6 +210,48 @@ function Ensure-WindowsServicePort {
   throw "$Label kuruldu ama port acilmadi: ${HostName}:${Port}. Denenen servisler: $($ServiceNames -join ', ')"
 }
 
+function Repair-MongoDbServiceConfig {
+  $mongoService = Get-Service -Name "MongoDB" -ErrorAction SilentlyContinue
+  if ($null -eq $mongoService) {
+    return
+  }
+
+  $mongoBaseDir = Join-Path $env:ProgramData "MongoDB"
+  $mongoDataDir = Join-Path $mongoBaseDir "data\db"
+  $mongoLogDir = Join-Path $mongoBaseDir "log"
+  $mongoConfigPath = Join-Path $mongoBaseDir "mongod.cfg"
+  $mongoLogPath = Join-Path $mongoLogDir "mongod.log"
+
+  New-Item -ItemType Directory -Force -Path $mongoDataDir, $mongoLogDir | Out-Null
+  & icacls.exe $mongoBaseDir /grant "NT AUTHORITY\NetworkService:(OI)(CI)F" /T | Out-Null
+
+  @"
+systemLog:
+  destination: file
+  path: $($mongoLogPath.Replace("\", "/"))
+  logAppend: true
+storage:
+  dbPath: $($mongoDataDir.Replace("\", "/"))
+net:
+  bindIp: 127.0.0.1
+  port: 27017
+"@ | Set-Content -Path $mongoConfigPath -Encoding ASCII
+
+  $mongoBinary = Get-ChildItem -Path "C:\Program Files\MongoDB\Server" -Filter "mongod.exe" -Recurse -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1
+
+  if ($null -eq $mongoBinary) {
+    throw "MongoDB binary bulunamadi: C:\Program Files\MongoDB\Server\**\mongod.exe"
+  }
+
+  $binaryPath = "`"$($mongoBinary.FullName)`" --config `"$mongoConfigPath`" --service"
+  & sc.exe config MongoDB binPath= $binaryPath start= auto | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "MongoDB service config guncellenemedi. Exit code: $LASTEXITCODE"
+  }
+}
+
 function Ensure-RedisServicePort {
   if (Test-PortOpen -HostName $RedisHost -Port ([int]$RedisPort)) {
     $resolvedServiceName = Resolve-ServiceName -ServiceNames @("Redis", "Memurai", "Memurai Developer", "redis-server")
@@ -369,7 +411,18 @@ New-Item -ItemType Directory -Force -Path $LogsDir, $BrowserCacheDir | Out-Null
 Ensure-Command -CommandName "node.exe" -Label "Node.js LTS" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 Ensure-Command -CommandName "npm.cmd" -Label "npm" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 $redisServiceName = Ensure-RedisServicePort
-$mongoServiceName = Ensure-WindowsServicePort -Label "MongoDB" -HostName "localhost" -Port 27017 -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+try {
+  $mongoServiceName = Ensure-WindowsServicePort -Label "MongoDB" -HostName "localhost" -Port 27017 -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+} catch {
+  Write-Host "MongoDB ilk baslatma basarisiz oldu, config onarimi deneniyor: $($_.Exception.Message)"
+  Repair-MongoDbServiceConfig
+  Start-Service -Name "MongoDB"
+  Start-Sleep -Seconds 5
+  if (-not (Test-PortOpen -HostName "localhost" -Port 27017)) {
+    throw "MongoDB config onarildi ama port acilmadi. Log: C:\ProgramData\MongoDB\log\mongod.log"
+  }
+  $mongoServiceName = "MongoDB"
+}
 $dependencyServices = @($redisServiceName, $mongoServiceName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
 Write-Host "Node paketleri kuruluyor/kontrol ediliyor"
