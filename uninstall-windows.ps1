@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 
 $services = @("HitmakerWorker", "HitmakerWeb")
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScExe = Join-Path $env:SystemRoot "System32\sc.exe"
 
 function Test-IsAdministrator {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -48,7 +49,7 @@ function Remove-HitmakerService {
     Write-Host "$ServiceName NSSM ile kaldirilamadi, sc.exe deneniyor. Exit code: $LASTEXITCODE"
   }
 
-  & sc.exe delete $ServiceName | Out-Null
+  & $ScExe delete $ServiceName | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "$ServiceName service kaldirilamadi. Exit code: $LASTEXITCODE"
   }
