@@ -14,6 +14,8 @@ $RedisHost = if ([string]::IsNullOrWhiteSpace($env:REDIS_HOST)) { "localhost" } 
 $RedisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { "6379" } else { $env:REDIS_PORT }
 $MongoDbChocolateyVersion = "7.0.35"
 $ResolvedBrowserBinaryPath = ""
+$ScExe = Join-Path $env:SystemRoot "System32\sc.exe"
+$IcaclsExe = Join-Path $env:SystemRoot "System32\icacls.exe"
 
 Set-Location $RootDir
 
@@ -35,6 +37,28 @@ function Update-ProcessPath {
   $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
   $env:Path = "$machinePath;$userPath"
+}
+
+function Find-ChocolateyPath {
+  $command = Get-Command choco.exe -ErrorAction SilentlyContinue
+  if ($null -ne $command) {
+    return $command.Source
+  }
+
+  $chocoPath = Join-Path $env:ProgramData "chocolatey\bin\choco.exe"
+  if (Test-Path $chocoPath) {
+    return $chocoPath
+  }
+
+  return ""
+}
+
+function Require-ChocolateyPath {
+  $chocoPath = Find-ChocolateyPath
+  if ([string]::IsNullOrWhiteSpace($chocoPath)) {
+    throw "Chocolatey bulunamadi. Yeni Administrator PowerShell acip tekrar calistir."
+  }
+  return $chocoPath
 }
 
 function Test-DotNet48Installed {
@@ -70,7 +94,7 @@ function Install-DotNet48 {
 function Ensure-Chocolatey {
   Install-DotNet48
 
-  if ($null -ne (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+  if (-not [string]::IsNullOrWhiteSpace((Find-ChocolateyPath))) {
     return
   }
 
@@ -80,7 +104,7 @@ function Ensure-Chocolatey {
   Invoke-Expression ((New-Object Net.WebClient).DownloadString("https://community.chocolatey.org/install.ps1"))
   Update-ProcessPath
 
-  if ($null -eq (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+  if ([string]::IsNullOrWhiteSpace((Find-ChocolateyPath))) {
     throw "Chocolatey kuruldu ama bu terminalde gorunmuyor. Yeni Administrator PowerShell acip tekrar calistir."
   }
 }
@@ -105,7 +129,8 @@ function Invoke-Installer {
 
   Ensure-Chocolatey
   Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
-  & choco.exe install $ChocolateyPackage -y --no-progress
+  $chocoPath = Require-ChocolateyPath
+  & $chocoPath install $ChocolateyPackage -y --no-progress
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
@@ -126,7 +151,8 @@ function Invoke-ChocolateyInstaller {
     $arguments += "--version=$Version"
     $arguments += "--allow-downgrade"
   }
-  & choco.exe @arguments
+  $chocoPath = Require-ChocolateyPath
+  & $chocoPath @arguments
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
@@ -284,7 +310,7 @@ function Repair-MongoDbServiceConfig {
   $mongoLogPath = Join-Path $mongoLogDir "mongod.log"
 
   New-Item -ItemType Directory -Force -Path $mongoDataDir, $mongoLogDir | Out-Null
-  & icacls.exe $mongoBaseDir /grant "NT AUTHORITY\NetworkService:(OI)(CI)F" /T | Out-Null
+  & $IcaclsExe $mongoBaseDir /grant "NT AUTHORITY\NetworkService:(OI)(CI)F" /T | Out-Null
 
   @"
 systemLog:
@@ -313,13 +339,20 @@ net:
     throw "MongoDB binary bulunamadi: C:\Program Files\MongoDB\Server\**\mongod.exe"
   }
 
-  $binaryPath = "`"$($mongoBinary.FullName)`" --config `"$mongoConfigPath`" --service"
-  $binPathArg = "binPath= $binaryPath"
-  $startArg = "start= auto"
-  & sc.exe config MongoDB $binPathArg $startArg | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw "MongoDB service config guncellenemedi. Exit code: $LASTEXITCODE"
+  $service = Get-Service -Name "MongoDB" -ErrorAction SilentlyContinue
+  if ($null -ne $service -and $service.Status -ne "Stopped") {
+    Stop-Service -Name "MongoDB" -Force
+    Start-Sleep -Seconds 2
   }
+
+  $binaryPath = "`"$($mongoBinary.FullName)`" --config `"$mongoConfigPath`" --service"
+  $serviceRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\MongoDB"
+  if (-not (Test-Path $serviceRegistryPath)) {
+    throw "MongoDB service registry bulunamadi: $serviceRegistryPath"
+  }
+
+  Set-ItemProperty -Path $serviceRegistryPath -Name ImagePath -Value $binaryPath
+  Set-ItemProperty -Path $serviceRegistryPath -Name Start -Value 2
 }
 
 function Ensure-MongoDbServicePort {
@@ -330,15 +363,16 @@ function Ensure-MongoDbServicePort {
 
   $mongoService = Get-Service -Name "MongoDB" -ErrorAction SilentlyContinue
   if ($null -ne $mongoService) {
-    $serviceConfig = & sc.exe qc MongoDB
-    $usesMongo8 = ($serviceConfig -join "`n") -match "\\Server\\8\."
+    $serviceConfig = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\MongoDB" -ErrorAction SilentlyContinue
+    $usesMongo8 = ($null -ne $serviceConfig -and [string]$serviceConfig.ImagePath -match "\\Server\\8\.")
     if ($usesMongo8) {
       Write-Host "MongoDB 8.x bu Windows imajinda uyumsuz gorundu. 7.0.x'e geciliyor."
       if ($mongoService.Status -ne "Stopped") {
         Stop-Service -Name "MongoDB" -Force
         Start-Sleep -Seconds 2
       }
-      & choco.exe uninstall mongodb -y --no-progress
+      $chocoPath = Require-ChocolateyPath
+      & $chocoPath uninstall mongodb -y --no-progress
       if ($LASTEXITCODE -ne 0) {
         Write-Host "MongoDB Chocolatey uninstall basarisiz oldu, devam ediliyor. Exit code: $LASTEXITCODE"
       }
@@ -353,7 +387,13 @@ function Ensure-MongoDbServicePort {
   }
 
   Repair-MongoDbServiceConfig
-  Start-Service -Name "MongoDB"
+  $mongoService = Get-Service -Name "MongoDB" -ErrorAction SilentlyContinue
+  if ($null -eq $mongoService) {
+    throw "MongoDB service bulunamadi."
+  }
+  if ($mongoService.Status -ne "Running") {
+    Start-Service -Name "MongoDB"
+  }
   Start-Sleep -Seconds 5
   if (-not (Test-PortOpen -HostName "localhost" -Port 27017)) {
     throw "MongoDB 7.0 kuruldu/config onarildi ama port acilmadi. Log: C:\ProgramData\MongoDB\log\mongod.log"
