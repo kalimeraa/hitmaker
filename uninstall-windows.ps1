@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $services = @("HitmakerWorker", "HitmakerWeb")
+$RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Test-IsAdministrator {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -20,7 +21,50 @@ function Find-Nssm {
     return $chocoNssm
   }
 
-  throw "NSSM bulunamadi. Servisleri kaldirmak icin NSSM gerekli."
+  return ""
+}
+
+function Remove-HitmakerService {
+  param(
+    [Parameter(Mandatory = $true)][string]$ServiceName,
+    [string]$NssmPath = ""
+  )
+
+  $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+  if ($null -eq $service) {
+    return
+  }
+
+  if ($service.Status -ne "Stopped") {
+    Stop-Service -Name $ServiceName -Force
+    Start-Sleep -Seconds 2
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($NssmPath)) {
+    & $NssmPath remove $ServiceName confirm
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+    Write-Host "$ServiceName NSSM ile kaldirilamadi, sc.exe deneniyor. Exit code: $LASTEXITCODE"
+  }
+
+  & sc.exe delete $ServiceName | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "$ServiceName service kaldirilamadi. Exit code: $LASTEXITCODE"
+  }
+}
+
+function Remove-PanelShortcut {
+  $shortcutPaths = @(
+    (Join-Path ([Environment]::GetFolderPath("Desktop")) "Hitmaker Panel.lnk"),
+    (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "Hitmaker Panel.lnk")
+  )
+
+  foreach ($shortcutPath in $shortcutPaths) {
+    if (Test-Path $shortcutPath) {
+      Remove-Item -Path $shortcutPath -Force
+    }
+  }
 }
 
 if (-not (Test-IsAdministrator)) {
@@ -30,18 +74,10 @@ if (-not (Test-IsAdministrator)) {
 
 $nssm = Find-Nssm
 foreach ($serviceName in $services) {
-  $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-  if ($null -eq $service) {
-    continue
-  }
-  if ($service.Status -ne "Stopped") {
-    Stop-Service -Name $serviceName -Force
-    Start-Sleep -Seconds 2
-  }
-  & $nssm remove $serviceName confirm
-  if ($LASTEXITCODE -ne 0) {
-    throw "$serviceName service kaldirilamadi. Exit code: $LASTEXITCODE"
-  }
+  Remove-HitmakerService -ServiceName $serviceName -NssmPath $nssm
 }
 
+Remove-PanelShortcut
+
 Write-Host "Hitmaker Windows servisleri kaldirildi. MongoDB/Redis/Memurai ve proje dosyalari silinmedi."
+Write-Host "Log ve browser cache dosyalari korunuyor: $(Join-Path $RootDir 'storage')"
