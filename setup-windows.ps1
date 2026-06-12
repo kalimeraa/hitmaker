@@ -12,6 +12,7 @@ $AppPort = if ([string]::IsNullOrWhiteSpace($env:PORT)) { 3100 } else { [int]$en
 $MongoUri = if ([string]::IsNullOrWhiteSpace($env:MONGODB_URI)) { "mongodb://localhost:27017/hitmaker" } else { $env:MONGODB_URI }
 $RedisHost = if ([string]::IsNullOrWhiteSpace($env:REDIS_HOST)) { "localhost" } else { $env:REDIS_HOST }
 $RedisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { "6379" } else { $env:REDIS_PORT }
+$MongoDbChocolateyVersion = "7.0.35"
 
 Set-Location $RootDir
 
@@ -104,6 +105,26 @@ function Invoke-Installer {
   Ensure-Chocolatey
   Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
   & choco.exe install $ChocolateyPackage -y --no-progress
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
+  }
+  Update-ProcessPath
+}
+
+function Invoke-ChocolateyInstaller {
+  param(
+    [Parameter(Mandatory = $true)][string]$Label,
+    [Parameter(Mandatory = $true)][string]$ChocolateyPackage,
+    [string]$Version = ""
+  )
+
+  Ensure-Chocolatey
+  Write-Host "$Label kuruluyor: choco $ChocolateyPackage $Version"
+  $arguments = @("install", $ChocolateyPackage, "-y", "--no-progress")
+  if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    $arguments += "--version=$Version"
+  }
+  & choco.exe @arguments
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
@@ -238,8 +259,15 @@ net:
 "@ | Set-Content -Path $mongoConfigPath -Encoding ASCII
 
   $mongoBinary = Get-ChildItem -Path "C:\Program Files\MongoDB\Server" -Filter "mongod.exe" -Recurse -ErrorAction SilentlyContinue |
-    Sort-Object FullName -Descending |
+    Where-Object { $_.FullName -like "*\Server\7.0\*" } |
     Select-Object -First 1
+
+  if ($null -eq $mongoBinary) {
+    $mongoBinary = Get-ChildItem -Path "C:\Program Files\MongoDB\Server" -Filter "mongod.exe" -Recurse -ErrorAction SilentlyContinue |
+      Where-Object { $_.FullName -notlike "*\Server\8.*\*" } |
+      Sort-Object FullName -Descending |
+      Select-Object -First 1
+  }
 
   if ($null -eq $mongoBinary) {
     throw "MongoDB binary bulunamadi: C:\Program Files\MongoDB\Server\**\mongod.exe"
@@ -250,6 +278,46 @@ net:
   if ($LASTEXITCODE -ne 0) {
     throw "MongoDB service config guncellenemedi. Exit code: $LASTEXITCODE"
   }
+}
+
+function Ensure-MongoDbServicePort {
+  if (Test-PortOpen -HostName "localhost" -Port 27017) {
+    $resolvedServiceName = Resolve-ServiceName -ServiceNames @("MongoDB", "MongoDB Server", "mongodb")
+    return $resolvedServiceName
+  }
+
+  $mongoService = Get-Service -Name "MongoDB" -ErrorAction SilentlyContinue
+  if ($null -ne $mongoService) {
+    $serviceConfig = & sc.exe qc MongoDB
+    $usesMongo8 = ($serviceConfig -join "`n") -match "\\Server\\8\."
+    if ($usesMongo8) {
+      Write-Host "MongoDB 8.x bu Windows imajinda uyumsuz gorundu. 7.0.x'e geciliyor."
+      if ($mongoService.Status -ne "Stopped") {
+        Stop-Service -Name "MongoDB" -Force
+        Start-Sleep -Seconds 2
+      }
+      & choco.exe uninstall mongodb -y --no-progress
+      if ($LASTEXITCODE -ne 0) {
+        Write-Host "MongoDB Chocolatey uninstall basarisiz oldu, devam ediliyor. Exit code: $LASTEXITCODE"
+      }
+      Start-Sleep -Seconds 2
+    }
+  }
+
+  if ($null -eq (Get-ChildItem -Path "C:\Program Files\MongoDB\Server" -Filter "mongod.exe" -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like "*\Server\7.0\*" } |
+    Select-Object -First 1)) {
+    Invoke-ChocolateyInstaller -Label "MongoDB $MongoDbChocolateyVersion" -ChocolateyPackage "mongodb" -Version $MongoDbChocolateyVersion
+  }
+
+  Repair-MongoDbServiceConfig
+  Start-Service -Name "MongoDB"
+  Start-Sleep -Seconds 5
+  if (-not (Test-PortOpen -HostName "localhost" -Port 27017)) {
+    throw "MongoDB 7.0 kuruldu/config onarildi ama port acilmadi. Log: C:\ProgramData\MongoDB\log\mongod.log"
+  }
+
+  return "MongoDB"
 }
 
 function Ensure-RedisServicePort {
@@ -412,16 +480,9 @@ Ensure-Command -CommandName "node.exe" -Label "Node.js LTS" -WingetId "OpenJS.No
 Ensure-Command -CommandName "npm.cmd" -Label "npm" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 $redisServiceName = Ensure-RedisServicePort
 try {
-  $mongoServiceName = Ensure-WindowsServicePort -Label "MongoDB" -HostName "localhost" -Port 27017 -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+$mongoServiceName = Ensure-MongoDbServicePort
 } catch {
-  Write-Host "MongoDB ilk baslatma basarisiz oldu, config onarimi deneniyor: $($_.Exception.Message)"
-  Repair-MongoDbServiceConfig
-  Start-Service -Name "MongoDB"
-  Start-Sleep -Seconds 5
-  if (-not (Test-PortOpen -HostName "localhost" -Port 27017)) {
-    throw "MongoDB config onarildi ama port acilmadi. Log: C:\ProgramData\MongoDB\log\mongod.log"
-  }
-  $mongoServiceName = "MongoDB"
+  throw "MongoDB kurulumu/baslatma basarisiz: $($_.Exception.Message)"
 }
 $dependencyServices = @($redisServiceName, $mongoServiceName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
