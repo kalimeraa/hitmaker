@@ -142,6 +142,7 @@ Installer davranışı:
 
 - Administrator değilse kendini yükseltilmiş PowerShell olarak tekrar açar.
 - `winget`, başarısız olursa Chocolatey ile Node.js LTS, MongoDB, Memurai ve NSSM kurmayı dener.
+- Chocolatey gerekiyorsa .NET Framework 4.8'i kontrol eder; eksikse indirip kurar ve reboot sonrası setup'ı tekrar çalıştırmanı ister.
 - `npm install` ve `npm run browser:install` çalıştırır.
 - CloakBrowser cache'ini service kullanabilsin diye `storage\cloakbrowser` altında tutar.
 - `Hitmaker Web` ve `Hitmaker Worker` Windows service'lerini kurar.

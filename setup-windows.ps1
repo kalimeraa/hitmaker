@@ -35,7 +35,39 @@ function Update-ProcessPath {
   $env:Path = "$machinePath;$userPath"
 }
 
+function Test-DotNet48Installed {
+  $release = Get-ItemPropertyValue `
+    -Path "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full" `
+    -Name Release `
+    -ErrorAction SilentlyContinue
+
+  return ($null -ne $release -and [int]$release -ge 528040)
+}
+
+function Install-DotNet48 {
+  if (Test-DotNet48Installed) {
+    return
+  }
+
+  $installerUrl = "https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe"
+  $installerPath = Join-Path $env:TEMP "ndp48-x86-x64-allos-enu.exe"
+
+  Write-Host ".NET Framework 4.8 indiriliyor"
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+
+  Write-Host ".NET Framework 4.8 kuruluyor"
+  $process = Start-Process -FilePath $installerPath -ArgumentList "/quiet", "/norestart" -Wait -PassThru
+  if ($process.ExitCode -notin @(0, 3010)) {
+    throw ".NET Framework 4.8 kurulumu basarisiz oldu. Exit code: $($process.ExitCode)"
+  }
+
+  throw ".NET Framework 4.8 kuruldu veya kurulum tamamlanmak icin reboot istiyor. Sunucuyu reboot edip setup-windows.cmd komutunu tekrar calistir."
+}
+
 function Ensure-Chocolatey {
+  Install-DotNet48
+
   if ($null -ne (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
     return
   }
