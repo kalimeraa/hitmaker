@@ -119,7 +119,7 @@ function Invoke-Installer {
   $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
   if ($null -ne $winget) {
     Write-Host "$Label kuruluyor: winget $WingetId"
-    & winget.exe install --id $WingetId --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
+    & winget.exe install --id $WingetId --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements | Out-Host
     if ($LASTEXITCODE -eq 0) {
       Update-ProcessPath
       return
@@ -130,7 +130,7 @@ function Invoke-Installer {
   Ensure-Chocolatey
   Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
   $chocoPath = Require-ChocolateyPath
-  & $chocoPath install $ChocolateyPackage -y --no-progress
+  & $chocoPath install $ChocolateyPackage -y --no-progress | Out-Host
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
@@ -152,24 +152,11 @@ function Invoke-ChocolateyInstaller {
     $arguments += "--allow-downgrade"
   }
   $chocoPath = Require-ChocolateyPath
-  & $chocoPath @arguments
+  & $chocoPath @arguments | Out-Host
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
   Update-ProcessPath
-}
-
-function Join-ExistingPath {
-  param(
-    [string]$BasePath,
-    [Parameter(Mandatory = $true)][string]$ChildPath
-  )
-
-  if ([string]::IsNullOrWhiteSpace($BasePath)) {
-    return ""
-  }
-
-  return Join-Path $BasePath $ChildPath
 }
 
 function Resolve-BrowserBinaryPath {
@@ -178,20 +165,6 @@ function Resolve-BrowserBinaryPath {
       return $env:CLOAKBROWSER_BINARY_PATH
     }
     throw "CLOAKBROWSER_BINARY_PATH verildi ama dosya bulunamadi: $env:CLOAKBROWSER_BINARY_PATH"
-  }
-
-  $candidatePaths = @(
-    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Google\Chrome\Application\chrome.exe"),
-    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
-    (Join-ExistingPath -BasePath $env:LocalAppData -ChildPath "Google\Chrome\Application\chrome.exe"),
-    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Microsoft\Edge\Application\msedge.exe"),
-    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe")
-  )
-
-  foreach ($candidatePath in $candidatePaths) {
-    if (-not [string]::IsNullOrWhiteSpace($candidatePath) -and (Test-Path $candidatePath)) {
-      return $candidatePath
-    }
   }
 
   return ""
@@ -372,7 +345,7 @@ function Ensure-MongoDbServicePort {
         Start-Sleep -Seconds 2
       }
       $chocoPath = Require-ChocolateyPath
-      & $chocoPath uninstall mongodb -y --no-progress
+      & $chocoPath uninstall mongodb -y --no-progress | Out-Host
       if ($LASTEXITCODE -ne 0) {
         Write-Host "MongoDB Chocolatey uninstall basarisiz oldu, devam ediliyor. Exit code: $LASTEXITCODE"
       }
@@ -442,7 +415,7 @@ function Find-Nssm {
     return $chocoNssm
   }
 
-  Invoke-Installer -Label "NSSM" -WingetId "NSSM.NSSM" -ChocolateyPackage "nssm"
+  Invoke-Installer -Label "NSSM" -WingetId "NSSM.NSSM" -ChocolateyPackage "nssm" | Out-Host
   $command = Get-Command nssm.exe -ErrorAction SilentlyContinue
   if ($null -ne $command) {
     return $command.Source
@@ -581,7 +554,7 @@ $env:CLOAKBROWSER_CACHE_DIR = $BrowserCacheDir
 $ResolvedBrowserBinaryPath = Resolve-BrowserBinaryPath
 if (-not [string]::IsNullOrWhiteSpace($ResolvedBrowserBinaryPath)) {
   $env:CLOAKBROWSER_BINARY_PATH = $ResolvedBrowserBinaryPath
-  Write-Host "Lokal Chromium/Chrome kullaniliyor, CloakBrowser zip indirilmeyecek: $ResolvedBrowserBinaryPath"
+  Write-Host "Manuel browser binary kullaniliyor, CloakBrowser zip indirilmeyecek: $ResolvedBrowserBinaryPath"
 } else {
   Write-Host "CloakBrowser Chromium kuruluyor/kontrol ediliyor"
   & npm.cmd run browser:install

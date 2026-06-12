@@ -141,9 +141,10 @@ setup-windows.cmd
 Installer davranışı:
 
 - Administrator değilse kendini yükseltilmiş PowerShell olarak tekrar açar.
-- `winget`, başarısız olursa Chocolatey ile Node.js LTS, MongoDB, Memurai ve NSSM kurmayı dener.
+- `winget`, başarısız olursa Chocolatey ile Node.js LTS, MongoDB 7.0.x, Memurai ve NSSM kurmayı dener.
 - Chocolatey gerekiyorsa .NET Framework 4.8'i kontrol eder; eksikse indirip kurar ve reboot sonrası setup'ı tekrar çalıştırmanı ister.
-- `npm install` ve `npm run browser:install` çalıştırır.
+- `npm install` çalıştırır.
+- `npm run browser:install` ile CloakBrowser stealth Chromium indirmeyi dener. Sadece `CLOAKBROWSER_BINARY_PATH` elle verilirse lokal binary kullanır.
 - CloakBrowser cache'ini service kullanabilsin diye `storage\cloakbrowser` altında tutar.
 - `Hitmaker Web` ve `Hitmaker Worker` Windows service'lerini kurar.
 - Servisleri otomatik başlatmaya ve reboot sonrası otomatik açılacak şekilde ayarlamaya çalışır.
@@ -213,10 +214,10 @@ Git Bash/WSL içinden Windows PowerShell'i çağırmak için:
 
 Script davranışı:
 
-- `-InstallDependencies` verilirse `winget`, yoksa Chocolatey ile Node.js LTS, MongoDB ve Memurai Developer kurmayı dener.
+- `-InstallDependencies` verilirse `winget`, yoksa Chocolatey ile Node.js LTS, MongoDB 7.0.x ve Memurai Developer kurmayı dener.
 - `-VerifyOnly` verilirse app/worker başlatmadan Node, npm, JS syntax, CloakBrowser, Redis/Memurai portu, MongoDB portu ve browser kapasite önerisini kontrol eder.
 - `node_modules` yoksa `npm install` çalıştırır.
-- `npm run browser:install` ile CloakBrowser Chromium indirmeyi dener.
+- `npm run browser:install` ile CloakBrowser stealth Chromium indirmeyi dener. Sadece `CLOAKBROWSER_BINARY_PATH` elle verilirse lokal binary kullanır.
 - Redis için `Redis` veya `Memurai` Windows service adlarını başlatmayı dener.
 - MongoDB için `MongoDB` Windows service adını başlatmayı dener.
 - `PORT` varsayılanı `3100` olur.
