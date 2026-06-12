@@ -61,7 +61,7 @@ function Invoke-Installer {
   $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
   if ($null -ne $winget) {
     Write-Host "$Label kuruluyor: winget $WingetId"
-    & winget.exe install --id $WingetId --exact --accept-package-agreements --accept-source-agreements
+    & winget.exe install --id $WingetId --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
     if ($LASTEXITCODE -eq 0) {
       Update-ProcessPath
       return
@@ -71,7 +71,7 @@ function Invoke-Installer {
 
   Ensure-Chocolatey
   Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
-  & choco.exe install $ChocolateyPackage -y
+  & choco.exe install $ChocolateyPackage -y --no-progress
   if ($LASTEXITCODE -ne 0) {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
@@ -118,6 +118,19 @@ function Test-PortOpen {
   }
 }
 
+function Resolve-ServiceName {
+  param([Parameter(Mandatory = $true)][string[]]$ServiceNames)
+
+  foreach ($serviceName in $ServiceNames) {
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($null -ne $service) {
+      return $serviceName
+    }
+  }
+
+  return ""
+}
+
 function Ensure-WindowsServicePort {
   param(
     [Parameter(Mandatory = $true)][string]$Label,
@@ -129,7 +142,8 @@ function Ensure-WindowsServicePort {
   )
 
   if (Test-PortOpen -HostName $HostName -Port $Port) {
-    return
+    $resolvedServiceName = Resolve-ServiceName -ServiceNames $ServiceNames
+    return $resolvedServiceName
   }
 
   foreach ($serviceName in $ServiceNames) {
@@ -141,7 +155,7 @@ function Ensure-WindowsServicePort {
         Start-Sleep -Seconds 4
       }
       if (Test-PortOpen -HostName $HostName -Port $Port) {
-        return
+        return $serviceName
       }
     }
   }
@@ -156,12 +170,41 @@ function Ensure-WindowsServicePort {
         Start-Sleep -Seconds 4
       }
       if (Test-PortOpen -HostName $HostName -Port $Port) {
-        return
+        return $serviceName
       }
     }
   }
 
   throw "$Label kuruldu ama port acilmadi: ${HostName}:${Port}. Denenen servisler: $($ServiceNames -join ', ')"
+}
+
+function Ensure-RedisServicePort {
+  if (Test-PortOpen -HostName $RedisHost -Port ([int]$RedisPort)) {
+    $resolvedServiceName = Resolve-ServiceName -ServiceNames @("Redis", "Memurai", "Memurai Developer", "redis-server")
+    return $resolvedServiceName
+  }
+
+  try {
+    $memuraiServiceName = Ensure-WindowsServicePort `
+      -Label "Redis/Memurai" `
+      -HostName $RedisHost `
+      -Port ([int]$RedisPort) `
+      -ServiceNames @("Redis", "Memurai", "Memurai Developer", "redis-server") `
+      -WingetId "Memurai.MemuraiDeveloper" `
+      -ChocolateyPackage "memurai-developer"
+    return $memuraiServiceName
+  } catch {
+    Write-Host "Memurai kurulumu/baslatma basarisiz oldu, Redis paketi deneniyor: $($_.Exception.Message)"
+  }
+
+  $redisServiceName = Ensure-WindowsServicePort `
+    -Label "Redis" `
+    -HostName $RedisHost `
+    -Port ([int]$RedisPort) `
+    -ServiceNames @("Redis", "redis-server") `
+    -WingetId "Redis.Redis" `
+    -ChocolateyPackage "redis-64"
+  return $redisServiceName
 }
 
 function Find-Nssm {
@@ -213,7 +256,8 @@ function Install-HitmakerService {
     [Parameter(Mandatory = $true)][string]$NssmPath,
     [Parameter(Mandatory = $true)][string]$Name,
     [Parameter(Mandatory = $true)][string]$DisplayName,
-    [Parameter(Mandatory = $true)][string]$ScriptFile
+    [Parameter(Mandatory = $true)][string]$ScriptFile,
+    [string[]]$DependencyServiceNames = @()
   )
 
   $nodePath = (Get-Command node.exe).Source
@@ -252,6 +296,11 @@ function Install-HitmakerService {
   & $NssmPath set $Name AppRotateOnline 1
   & $NssmPath set $Name AppRotateBytes 10485760
   & $NssmPath set $Name Start SERVICE_AUTO_START
+  & $NssmPath set $Name AppExit Default Restart
+  & $NssmPath set $Name AppThrottle 1500
+  if ($DependencyServiceNames.Count) {
+    & $NssmPath set $Name DependOnService $DependencyServiceNames
+  }
   & $NssmPath set $Name AppEnvironmentExtra $envPairs
 
   Write-Host "$DisplayName service kuruldu"
@@ -287,8 +336,9 @@ New-Item -ItemType Directory -Force -Path $LogsDir, $BrowserCacheDir | Out-Null
 
 Ensure-Command -CommandName "node.exe" -Label "Node.js LTS" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
 Ensure-Command -CommandName "npm.cmd" -Label "npm" -WingetId "OpenJS.NodeJS.LTS" -ChocolateyPackage "nodejs-lts"
-Ensure-WindowsServicePort -Label "Redis/Memurai" -HostName "localhost" -Port 6379 -ServiceNames @("Redis", "Memurai") -WingetId "Memurai.MemuraiDeveloper" -ChocolateyPackage "memurai-developer"
-Ensure-WindowsServicePort -Label "MongoDB" -HostName "localhost" -Port 27017 -ServiceNames @("MongoDB", "MongoDB Server") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+$redisServiceName = Ensure-RedisServicePort
+$mongoServiceName = Ensure-WindowsServicePort -Label "MongoDB" -HostName "localhost" -Port 27017 -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+$dependencyServices = @($redisServiceName, $mongoServiceName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
 Write-Host "Node paketleri kuruluyor/kontrol ediliyor"
 & npm.cmd install
@@ -304,8 +354,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $nssmPath = Find-Nssm
-Install-HitmakerService -NssmPath $nssmPath -Name "HitmakerWeb" -DisplayName "Hitmaker Web" -ScriptFile "server.js"
-Install-HitmakerService -NssmPath $nssmPath -Name "HitmakerWorker" -DisplayName "Hitmaker Worker" -ScriptFile "worker.js"
+Install-HitmakerService -NssmPath $nssmPath -Name "HitmakerWeb" -DisplayName "Hitmaker Web" -ScriptFile "server.js" -DependencyServiceNames $dependencyServices
+Install-HitmakerService -NssmPath $nssmPath -Name "HitmakerWorker" -DisplayName "Hitmaker Worker" -ScriptFile "worker.js" -DependencyServiceNames $dependencyServices
 New-PanelShortcut
 
 if (-not $NoStart) {

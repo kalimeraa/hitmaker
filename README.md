@@ -149,6 +149,8 @@ Installer davranışı:
 - Masaüstüne `Hitmaker Panel` kısayolu ekler.
 - Loglar `storage\logs\HitmakerWeb.*.log` ve `storage\logs\HitmakerWorker.*.log` dosyalarına yazılır.
 
+Windows service modunda browser'lar background session'da çalışır; bu yüzden tasklarda `Headless` açık bırakılmalıdır. Görünür browser ile manuel test gerekiyorsa service yerine `.\startwindows.ps1` ile terminalden çalıştır.
+
 Servis yönetimi:
 
 ```bat

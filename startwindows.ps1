@@ -49,7 +49,7 @@ function Invoke-PackageInstall {
   $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
   if ($null -ne $winget) {
     Write-Host "$Label kuruluyor: winget $WingetId"
-    & winget.exe install --id $WingetId --exact --accept-package-agreements --accept-source-agreements
+    & winget.exe install --id $WingetId --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
     if ($LASTEXITCODE -ne 0) {
       throw "$Label winget kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
     }
@@ -60,7 +60,7 @@ function Invoke-PackageInstall {
   $choco = Get-Command choco.exe -ErrorAction SilentlyContinue
   if ($null -ne $choco) {
     Write-Host "$Label kuruluyor: choco $ChocolateyPackage"
-    & choco.exe install $ChocolateyPackage -y
+    & choco.exe install $ChocolateyPackage -y --no-progress
     if ($LASTEXITCODE -ne 0) {
       throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
     }
@@ -195,6 +195,36 @@ function Ensure-ServicePort {
   throw "$Label bulunamadi: ${HostName}:${Port}. Servisi kontrol et veya env ayarlarini duzelt."
 }
 
+function Ensure-RedisServicePort {
+  if (Test-PortOpen -HostName $RedisHost -Port $RedisPort) {
+    return
+  }
+
+  try {
+    Ensure-ServicePort `
+      -HostName $RedisHost `
+      -Port $RedisPort `
+      -Label "Redis/Memurai" `
+      -ServiceNames @("Redis", "Memurai", "Memurai Developer", "redis-server") `
+      -WingetId "Memurai.MemuraiDeveloper" `
+      -ChocolateyPackage "memurai-developer"
+    return
+  } catch {
+    if (-not $InstallDependencies) {
+      throw
+    }
+    Write-Host "Memurai bulunamadi, Redis paketi deneniyor: $($_.Exception.Message)"
+  }
+
+  Ensure-ServicePort `
+    -HostName $RedisHost `
+    -Port $RedisPort `
+    -Label "Redis" `
+    -ServiceNames @("Redis", "redis-server") `
+    -WingetId "Redis.Redis" `
+    -ChocolateyPackage "redis-64"
+}
+
 function Stop-ProcessTree {
   param([AllowNull()][System.Diagnostics.Process]$Process)
 
@@ -286,8 +316,8 @@ if ($InstallDependencies) {
   }
 }
 
-Ensure-ServicePort -HostName $RedisHost -Port $RedisPort -Label "Redis/Memurai" -ServiceNames @("Redis", "Memurai") -WingetId "Memurai.MemuraiDeveloper" -ChocolateyPackage "memurai-developer"
-Ensure-ServicePort -HostName $MongoHost -Port $MongoPort -Label "MongoDB" -ServiceNames @("MongoDB", "MongoDB Server") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
+Ensure-RedisServicePort
+Ensure-ServicePort -HostName $MongoHost -Port $MongoPort -Label "MongoDB" -ServiceNames @("MongoDB", "MongoDB Server", "mongodb") -WingetId "MongoDB.Server" -ChocolateyPackage "mongodb"
 
 $env:PORT = [string]$AppPort
 $env:MONGODB_URI = $MongoUri
