@@ -13,6 +13,7 @@ $MongoUri = if ([string]::IsNullOrWhiteSpace($env:MONGODB_URI)) { "mongodb://loc
 $RedisHost = if ([string]::IsNullOrWhiteSpace($env:REDIS_HOST)) { "localhost" } else { $env:REDIS_HOST }
 $RedisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { "6379" } else { $env:REDIS_PORT }
 $MongoDbChocolateyVersion = "7.0.35"
+$ResolvedBrowserBinaryPath = ""
 
 Set-Location $RootDir
 
@@ -130,6 +131,44 @@ function Invoke-ChocolateyInstaller {
     throw "$Label Chocolatey kurulumu basarisiz oldu. Exit code: $LASTEXITCODE"
   }
   Update-ProcessPath
+}
+
+function Join-ExistingPath {
+  param(
+    [string]$BasePath,
+    [Parameter(Mandatory = $true)][string]$ChildPath
+  )
+
+  if ([string]::IsNullOrWhiteSpace($BasePath)) {
+    return ""
+  }
+
+  return Join-Path $BasePath $ChildPath
+}
+
+function Resolve-BrowserBinaryPath {
+  if (-not [string]::IsNullOrWhiteSpace($env:CLOAKBROWSER_BINARY_PATH)) {
+    if (Test-Path $env:CLOAKBROWSER_BINARY_PATH) {
+      return $env:CLOAKBROWSER_BINARY_PATH
+    }
+    throw "CLOAKBROWSER_BINARY_PATH verildi ama dosya bulunamadi: $env:CLOAKBROWSER_BINARY_PATH"
+  }
+
+  $candidatePaths = @(
+    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath $env:LocalAppData -ChildPath "Google\Chrome\Application\chrome.exe"),
+    (Join-ExistingPath -BasePath $env:ProgramFiles -ChildPath "Microsoft\Edge\Application\msedge.exe"),
+    (Join-ExistingPath -BasePath ${env:ProgramFiles(x86)} -ChildPath "Microsoft\Edge\Application\msedge.exe")
+  )
+
+  foreach ($candidatePath in $candidatePaths) {
+    if (-not [string]::IsNullOrWhiteSpace($candidatePath) -and (Test-Path $candidatePath)) {
+      return $candidatePath
+    }
+  }
+
+  return ""
 }
 
 function Ensure-Command {
@@ -423,6 +462,9 @@ function Install-HitmakerService {
     "CLOAKBROWSER_CACHE_DIR=$BrowserCacheDir",
     "REQUEST_BODY_LIMIT=25mb"
   )
+  if (-not [string]::IsNullOrWhiteSpace($ResolvedBrowserBinaryPath)) {
+    $envPairs += "CLOAKBROWSER_BINARY_PATH=$ResolvedBrowserBinaryPath"
+  }
 
   Remove-ServiceIfExists -NssmPath $NssmPath -Name $Name
 
@@ -494,10 +536,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $env:CLOAKBROWSER_CACHE_DIR = $BrowserCacheDir
-Write-Host "CloakBrowser Chromium kuruluyor/kontrol ediliyor"
-& npm.cmd run browser:install
-if ($LASTEXITCODE -ne 0) {
-  throw "npm run browser:install basarisiz oldu. Exit code: $LASTEXITCODE"
+$ResolvedBrowserBinaryPath = Resolve-BrowserBinaryPath
+if (-not [string]::IsNullOrWhiteSpace($ResolvedBrowserBinaryPath)) {
+  $env:CLOAKBROWSER_BINARY_PATH = $ResolvedBrowserBinaryPath
+  Write-Host "Lokal Chromium/Chrome kullaniliyor, CloakBrowser zip indirilmeyecek: $ResolvedBrowserBinaryPath"
+} else {
+  Write-Host "CloakBrowser Chromium kuruluyor/kontrol ediliyor"
+  & npm.cmd run browser:install
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm run browser:install basarisiz oldu. Exit code: $LASTEXITCODE"
+  }
 }
 
 $nssmPath = Find-Nssm
