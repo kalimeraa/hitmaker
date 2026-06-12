@@ -314,7 +314,9 @@ net:
   }
 
   $binaryPath = "`"$($mongoBinary.FullName)`" --config `"$mongoConfigPath`" --service"
-  & sc.exe config MongoDB binPath= $binaryPath start= auto | Out-Null
+  $binPathArg = "binPath= $binaryPath"
+  $startArg = "start= auto"
+  & sc.exe config MongoDB $binPathArg $startArg | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "MongoDB service config guncellenemedi. Exit code: $LASTEXITCODE"
   }
