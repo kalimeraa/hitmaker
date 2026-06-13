@@ -77,7 +77,39 @@
             </div>
             <div>
               <label for="editProxyUrl" class="form-label">Proxy</label>
-              <input class="form-control" id="editProxyUrl">
+              <input class="form-control" id="editProxyUrl" placeholder="http://user:pass@host:port veya socks5://user:pass@host:port" data-proxy-url="edit">
+              <div class="proxy-builder mt-2" data-proxy-builder="edit">
+                <div class="row g-2">
+                  <div class="col-5">
+                    <label class="form-label small" for="editProxyProtocol">Tip</label>
+                    <select class="form-select" id="editProxyProtocol" data-proxy-field="protocol">
+                      <option value="http">HTTP</option>
+                      <option value="https">HTTPS</option>
+                      <option value="socks5" selected>SOCKS5</option>
+                      <option value="socks5h">SOCKS5H</option>
+                      <option value="socks4">SOCKS4</option>
+                      <option value="socks4a">SOCKS4A</option>
+                    </select>
+                  </div>
+                  <div class="col-7">
+                    <label class="form-label small" for="editProxyPort">Port</label>
+                    <input class="form-control" id="editProxyPort" data-proxy-field="port" placeholder="8180">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label small" for="editProxyHost">Host</label>
+                    <input class="form-control" id="editProxyHost" data-proxy-field="host" placeholder="ankara8.buymobileproxy.com">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small" for="editProxyUsername">Kullanıcı</label>
+                    <input class="form-control" id="editProxyUsername" data-proxy-field="username" placeholder="opsiyonel">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small" for="editProxyPassword">Şifre</label>
+                    <input class="form-control" id="editProxyPassword" data-proxy-field="password" placeholder="opsiyonel">
+                  </div>
+                </div>
+                <div class="proxy-preview mt-2" data-proxy-preview="edit">Proxy boş.</div>
+              </div>
             </div>
             <div class="cookie-input-group" data-cookie-input-group="edit">
               <label class="form-label">Cookie</label>

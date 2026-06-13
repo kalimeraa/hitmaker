@@ -364,6 +364,35 @@ h2 {
   font-size: 0.84rem;
 }
 
+.proxy-builder {
+  border: 1px solid #e5e9f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.proxy-builder .form-label.small {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.proxy-preview {
+  min-height: 20px;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.proxy-preview.is-ready {
+  color: #146c43;
+}
+
+.proxy-preview.is-warn {
+  color: #8a5d00;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 100%);

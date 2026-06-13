@@ -2,6 +2,9 @@ const { normalizeHost } = require("../Utils/domain");
 const { HttpError } = require("../Utils/httpError");
 const { maxParallelBrowsers } = require("../../config/app");
 
+const SUPPORTED_PROXY_PROTOCOLS = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
+const PROXY_FORMAT_MESSAGE = "Proxy must be http://host:port, https://host:port, socks4://host:port, socks5://host:port or socks5://user:pass@host:port";
+
 function parseKeywords(value) {
   return String(value || "")
     .split(/\r?\n|,/)
@@ -19,12 +22,21 @@ function normalizeProxyUrl(value) {
   const proxyUrl = normalizeOptionalText(value);
   if (!proxyUrl) return "";
 
-  const parsed = new URL(proxyUrl);
-  if (!["http:", "https:", "socks4:", "socks5:"].includes(parsed.protocol)) {
-    throw new HttpError(400, "Proxy must be http://host:port, https://host:port, socks4://host:port or socks5://host:port");
+  let parsed;
+  try {
+    parsed = new URL(proxyUrl);
+  } catch (error) {
+    throw new HttpError(400, PROXY_FORMAT_MESSAGE);
+  }
+  if (!SUPPORTED_PROXY_PROTOCOLS.has(parsed.protocol)) {
+    throw new HttpError(400, PROXY_FORMAT_MESSAGE);
   }
   if (!parsed.hostname || !parsed.port) {
     throw new HttpError(400, "Proxy must include host and port");
+  }
+  if (parsed.protocol === "socks:") {
+    parsed.protocol = "socks5:";
+    return parsed.href.replace(/\/$/, "");
   }
   return proxyUrl;
 }

@@ -39,6 +39,128 @@ function extractAjaxErrorMessage(error, fallbackMessage) {
   return [statusText, message, details].filter(Boolean).join("\n");
 }
 
+function proxyGroupFor(scope) {
+  return $(`[data-proxy-builder="${scope}"]`);
+}
+
+function proxyUrlInputFor(scope) {
+  return $(`[data-proxy-url="${scope}"]`);
+}
+
+function proxyPreviewFor(scope) {
+  return $(`[data-proxy-preview="${scope}"]`);
+}
+
+function proxyFieldFor(scope, field) {
+  return proxyGroupFor(scope).find(`[data-proxy-field="${field}"]`);
+}
+
+function encodeProxyCredential(value) {
+  return encodeURIComponent(cleanOptionalText(value));
+}
+
+function decodeProxyCredential(value) {
+  try {
+    return decodeURIComponent(value || "");
+  } catch (error) {
+    return value || "";
+  }
+}
+
+function setProxyPreview(scope, text, state) {
+  proxyPreviewFor(scope)
+    .removeClass("is-ready is-warn")
+    .addClass(state ? `is-${state}` : "")
+    .text(text);
+}
+
+function buildProxyUrlFromParts(scope) {
+  const protocol = cleanOptionalText(proxyFieldFor(scope, "protocol").val()) || "socks5";
+  const host = cleanOptionalText(proxyFieldFor(scope, "host").val());
+  const port = cleanOptionalText(proxyFieldFor(scope, "port").val());
+  const username = cleanOptionalText(proxyFieldFor(scope, "username").val());
+  const password = cleanOptionalText(proxyFieldFor(scope, "password").val());
+
+  if (!host && !port && !username && !password) return "";
+  if (!host || !port) return null;
+
+  const auth = username
+    ? `${encodeProxyCredential(username)}${password ? `:${encodeProxyCredential(password)}` : ""}@`
+    : "";
+
+  return `${protocol}://${auth}${host}:${port}`;
+}
+
+function parseProxyUrlToParts(value) {
+  const text = cleanOptionalText(value);
+  if (!text) return null;
+
+  try {
+    const parsed = new URL(text);
+    const protocol = parsed.protocol.replace(":", "") === "socks"
+      ? "socks5"
+      : parsed.protocol.replace(":", "");
+
+    return {
+      protocol,
+      host: parsed.hostname,
+      port: parsed.port,
+      username: decodeProxyCredential(parsed.username),
+      password: decodeProxyCredential(parsed.password)
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function setProxyBuilderFromUrl(scope, value) {
+  const parts = parseProxyUrlToParts(value);
+  if (!parts) {
+    if (cleanOptionalText(value)) {
+      setProxyPreview(scope, "Proxy URL formatı eksik. Örn: socks5://user:pass@host:port", "warn");
+      return;
+    }
+    proxyFieldFor(scope, "host").val("");
+    proxyFieldFor(scope, "port").val("");
+    proxyFieldFor(scope, "username").val("");
+    proxyFieldFor(scope, "password").val("");
+    syncProxyPreview(scope);
+    return;
+  }
+
+  proxyFieldFor(scope, "protocol").val(parts.protocol || "socks5");
+  proxyFieldFor(scope, "host").val(parts.host || "");
+  proxyFieldFor(scope, "port").val(parts.port || "");
+  proxyFieldFor(scope, "username").val(parts.username || "");
+  proxyFieldFor(scope, "password").val(parts.password || "");
+  syncProxyPreview(scope);
+}
+
+function syncProxyPreview(scope) {
+  const builtUrl = buildProxyUrlFromParts(scope);
+  const rawUrl = cleanOptionalText(proxyUrlInputFor(scope).val());
+
+  if (builtUrl) {
+    setProxyPreview(scope, builtUrl, "ready");
+    return;
+  }
+
+  if (builtUrl === null) {
+    setProxyPreview(scope, "Host ve port gerekli.", "warn");
+    return;
+  }
+
+  setProxyPreview(scope, rawUrl || "Proxy boş.", rawUrl ? "ready" : "");
+}
+
+function applyProxyBuilder(scope) {
+  const builtUrl = buildProxyUrlFromParts(scope);
+  if (builtUrl) {
+    proxyUrlInputFor(scope).val(builtUrl);
+  }
+  syncProxyPreview(scope);
+}
+
 function renderBrowserCapacityHint(scope) {
   const $hint = $(`[data-browser-capacity-hint="${scope}"]`);
   if (!browserCapacity) {
@@ -251,6 +373,7 @@ function showTaskEditModal(taskId) {
   $("#editHeadless").prop("checked", Boolean(task.headless));
   $("#editDeviceMode").val(task.deviceMode || "desktop");
   $("#editProxyUrl").val(cleanOptionalText(task.proxyUrl));
+  setProxyBuilderFromUrl("edit", task.proxyUrl);
   $("#editCookies").val((task.cookieSets || []).length
     ? JSON.stringify({ cookieSets: task.cookieSets }, null, 2)
     : ((task.cookies || []).length ? JSON.stringify(task.cookies, null, 2) : ""));
@@ -674,6 +797,12 @@ $(document).on("change", ".cookie-source-toggle input", function () {
 $(document).on("click", "[data-apply-browser-capacity]", function () {
   applyBrowserCapacity(String($(this).data("apply-browser-capacity")));
 });
+$(document).on("input change", "[data-proxy-builder] [data-proxy-field]", function () {
+  applyProxyBuilder(String($(this).closest("[data-proxy-builder]").data("proxy-builder")));
+});
+$(document).on("input", "[data-proxy-url]", function () {
+  setProxyBuilderFromUrl(String($(this).data("proxy-url")), $(this).val());
+});
 $(document).on("change", "[data-cookie-file]", function () {
   const files = Array.from(this.files || []);
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -717,6 +846,8 @@ candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
 taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
 syncCookieSource("create");
 syncCookieSource("edit");
+syncProxyPreview("create");
+syncProxyPreview("edit");
 sanitizeOptionalFields();
 checkHealth();
 loadBrowserCapacity();
