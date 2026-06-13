@@ -27,6 +27,18 @@ function cleanOptionalText(value) {
   return ["null", "undefined"].includes(text.toLowerCase()) ? "" : text;
 }
 
+function extractAjaxErrorMessage(error, fallbackMessage) {
+  const statusText = error && error.status ? `HTTP ${error.status}` : "";
+  const jsonError = error && error.responseJSON && error.responseJSON.error;
+  const jsonDetails = error && error.responseJSON && error.responseJSON.details;
+  const textError = error && typeof error.responseText === "string" ? error.responseText.trim() : "";
+  const nativeError = error && error.message;
+  const message = jsonError || textError || nativeError || fallbackMessage;
+  const details = Array.isArray(jsonDetails) ? jsonDetails.join("\n") : (jsonDetails || "");
+
+  return [statusText, message, details].filter(Boolean).join("\n");
+}
+
 function renderBrowserCapacityHint(scope) {
   const $hint = $(`[data-browser-capacity-hint="${scope}"]`);
   if (!browserCapacity) {
@@ -563,7 +575,7 @@ $("#taskForm").on("submit", async function (event) {
     });
     await loadTasks();
   } catch (xhr) {
-    alert((xhr.responseJSON && xhr.responseJSON.error) || "Task oluşturulamadı");
+    alert(extractAjaxErrorMessage(xhr, "Task oluşturulamadı"));
   } finally {
     $button.prop("disabled", false).text("Task aç");
   }
@@ -571,7 +583,7 @@ $("#taskForm").on("submit", async function (event) {
 
 $("#tasks").on("click", "[data-delete-task]", function () {
   deleteTask($(this).data("delete-task")).catch((error) => {
-    alert((error.responseJSON && error.responseJSON.error) || "Task silinemedi");
+    alert(extractAjaxErrorMessage(error, "Task silinemedi"));
     scheduleLoadTasks();
   });
 });
@@ -579,7 +591,7 @@ $("#tasks").on("click", "[data-retry-task]", function () {
   const $button = $(this);
   $button.prop("disabled", true).text("Retry...");
   retryRun($button.data("retry-task"), Number($button.data("retry-run"))).catch((error) => {
-    alert((error.responseJSON && error.responseJSON.error) || "Run retry başlatılamadı");
+    alert(extractAjaxErrorMessage(error, "Run retry başlatılamadı"));
     scheduleLoadTasks();
   });
 });
@@ -600,7 +612,7 @@ $("#taskEditForm").on("submit", async function (event) {
     taskEditModal.hide();
     await loadTasks();
   } catch (xhr) {
-    alert((xhr.responseJSON && xhr.responseJSON.error) || "Task güncellenemedi");
+    alert(extractAjaxErrorMessage(xhr, "Task güncellenemedi"));
   } finally {
     $button.prop("disabled", false).text("Kaydet ve yeniden başlat");
   }
@@ -616,7 +628,7 @@ $("#cookieImportForm").on("submit", async function (event) {
     $("#cookiePoolFileName").text("");
     await loadCookies();
   } catch (error) {
-    alert((error.responseJSON && error.responseJSON.error) || error.message || "Cookie yüklenemedi");
+    alert(extractAjaxErrorMessage(error, "Cookie yüklenemedi"));
   } finally {
     $button.prop("disabled", false).text("Havuza yükle");
   }
@@ -628,17 +640,17 @@ $("#cookiePoolFiles").on("change", function () {
 });
 $("#cookies").on("click", "[data-cookie-status]", function () {
   updateCookieStatus($(this).data("cookie-status"), String($(this).data("status"))).then(loadCookies).catch((error) => {
-    alert((error.responseJSON && error.responseJSON.error) || "Cookie durumu değiştirilemedi");
+    alert(extractAjaxErrorMessage(error, "Cookie durumu değiştirilemedi"));
   });
 });
 $("#cookies").on("click", "[data-cookie-edit]", function () {
   editCookiePoolItem($(this).data("cookie-edit")).then(loadCookies).catch((error) => {
-    alert((error.responseJSON && error.responseJSON.error) || "Cookie güncellenemedi");
+    alert(extractAjaxErrorMessage(error, "Cookie güncellenemedi"));
   });
 });
 $("#cookies").on("click", "[data-cookie-delete]", function () {
   deleteCookiePoolItem($(this).data("cookie-delete")).then(loadCookies).catch((error) => {
-    alert((error.responseJSON && error.responseJSON.error) || "Cookie silinemedi");
+    alert(extractAjaxErrorMessage(error, "Cookie silinemedi"));
   });
 });
 $(document).on("click", "[data-page-target]", function () {
