@@ -109,20 +109,49 @@ Google Auth ile ilgili önemli log event'leri:
 - `google_auth_cookie_generation_completed`
 - `google_auth_cookie_bundle_created`
 - `google_auth_recaptcha_required`
+- `google_auth_captcha_sitekey_resolved`
+- `google_auth_captcha_sitekey_wait_timeout`
 - `google_auth_captcha_solve_started`
+- `google_auth_captcha_dom_inspected` (sadece `CAPTCHA_DEBUG=1`)
 - `google_auth_captcha_solved`
 - `google_auth_captcha_solve_failed`
+- `google_auth_captcha_submit_started`
+- `google_auth_captcha_submit_result`
+- `google_auth_captcha_attempt_failed`
 - `google_auth_recaptcha_completed`
+- `google_auth_2fa_challenge_detected`
+- `google_auth_2fa_window_wait`
+- `google_auth_2fa_code_generated`
+- `google_auth_2fa_code_filled`
+- `google_auth_2fa_submitted`
+- `google_auth_2fa_result`
+- `google_auth_2fa_failed`
 
 ## Captcha Çözüm Kuralları
 
 - Google Auth login akışındaki reCAPTCHA, 2captcha servisi (`@2captcha/captcha-solver`) ile otomatik çözülür.
-- 2captcha entegrasyonu yalnızca `app/Automation/recaptchaSolver.js` içinde izole edilir; SDK başka katmana sızmaz.
-- 2captcha API anahtarı env'den okunmaz. Google Auth sekmesindeki `2captcha API anahtarı` alanından girilir ve çerez üretim isteğiyle (`captchaApiKey`) birlikte servise taşınır.
+- İki katman vardır: saf 2captcha API entegrasyonu `app/Services/captchaSolverService.js` içinde (Playwright/DOM bilgisi yok, hem Google Auth hem Task tarafından kullanılır); browser glue (sitekey okuma + token enjeksiyonu) `app/Automation/recaptchaSolver.js` içindedir. SDK başka katmana sızmaz.
+- 2captcha API anahtarı env'den okunmaz. Google Auth sekmesindeki `2captcha API anahtarı` alanından girilir ve çerez üretim isteğiyle (`captchaApiKey`) birlikte servise taşınır. Task tarafında da nullable `captchaApiKey` alanı vardır.
 - API anahtarı boşsa otomatik çözüm denenmez; akış mevcut recaptcha davranışına düşer.
-- Sitekey ve `data-s` her zaman DOM'dan okunur; sabit sitekey kullanılmaz. Enterprise/invisible varyantları otomatik algılanır.
-- Çözülen token `g-recaptcha-response` alanına yazılır ve mümkünse reCAPTCHA callback'i tetiklenir.
+- Sitekey ve `data-s` her zaman DOM'dan okunur; sabit sitekey kullanılmaz. Google signin `data-site-key`/`data-enterprise-site-key` ve `data-client-signature` (data-s) kullanır; bunlar ile anchor iframe'in `&s=` parametresi merge edilir. Enterprise/invisible varyantları otomatik algılanır.
+- Challenge sayfası `/challenge/recaptcha`'ya widget render olmadan düşebilir; bu yüzden sitekey gelene kadar `waitForRecaptchaParams` ile beklenir (varsayılan 25 sn). Hemen "sitekey not found" denmez.
+- Çözülen token `g-recaptcha-response` textarea'sına **sadece `.value`/`.textContent` ile** yazılır. `innerHTML` ATAMASI YASAKTIR: Google signin sayfası Trusted Types zorlar ve `innerHTML` exception fırlatıp tüm enjeksiyonu iptal eder.
+- Token yazıldıktan sonra `grecaptcha.getResponse`/`grecaptcha.enterprise.getResponse` override edilir ve `___grecaptcha_cfg.clients` ağacındaki tüm `callback` fonksiyonları token ile tetiklenir (visited-guard'lı tam traversal).
+- Enterprise çözümü dakikalar sürebilir; bu sırada sayfa kendini reload edebilir. Enjeksiyon `injectRecaptchaTokenStable` ile "execution context destroyed" yarışına karşı retry'lı yapılır. 2captcha'ya giden ağ koparsa (DNS/bağlantı) çözücü süre dolana dek tekrar dener.
 - Otomatik çözüm başarısız olursa headless modda akış `recaptcha_challenge` ile durur; non-headless modda mevcut manuel bekleme path'i korunur.
+- **Operasyonel gerçek:** Google'ın KENDİ giriş ekranındaki Enterprise + data-s captcha'sı (tıklayınca resim bulmacasına çıkar) 2captcha tarafından güvenilir çözülemez ("unable to solve after 3 attempts") ve token gelse bile Google sunucu tarafında session/cihaz/risk doğrulamasıyla reddedebilir. Bu, Google login'ine özgü bir kısıttır, kod hatası değildir (aynı kod 2captcha v2 demo'sunda geçer). Prod stratejisi captcha'yı çözmek değil, **temiz residential/mobil proxy + temiz/ısınmış hesap** ile captcha'nın hiç çıkmamasını sağlamaktır; captcha çıkan hesap "yanmış" sayılıp rotate edilmelidir.
+
+## 2FA (TOTP) Kuralları
+
+- 2FA kodu `speakeasy` ile TOTP (base32, 6 hane, 30 sn step) olarak üretilir; üretim/parse tek yerde `app/Automation/googleAuthLogin.js` içindedir.
+- TOTP kodu 30 sn pencere sınırında bayatlayıp "Wrong code" verebilir. Bu yüzden kod input görünür olduktan SONRA, `generateTotpWindowSafe` ile üretilir: pencerede ~6 sn'den az kaldıysa bir sonraki pencereye geçilir, böylece kod fill+submit boyunca geçerli kalır.
+- "Wrong code"/"Yanlış kod" tespit edilirse (`detectWrongTotpCode`) input temizlenip taze pencere-güvenli kodla en fazla 3 deneme yapılır.
+- Her adım loglanır: `2fa_challenge_detected`, `2fa_window_wait`, `2fa_code_generated` (kod maskeli + kalan saniye), `2fa_code_filled`, `2fa_submitted`, `2fa_result` (stillOn2fa/wrongCode).
+
+## Proxy ile Giriş Kuralları
+
+- `generateGoogleAuthCookies` `proxyUrl` alır ve `app/Automation/cloakBrowserClient.js` üzerinden context'e geçirir; kimlikli proxy'ler `anonymizeProxyIfNeeded` ile sarılır.
+- Görünür/proxy'li manuel test için `htmls/smoke-google-auth.js` env üzerinden `GAUTH_PROXY` okur (repo'ya secret yazılmaz). Captcha/2FA davranışını incelemek için `htmls/captcha-hunt.js` `ACCOUNTS_FILE` + `GAUTH_PROXY` + `CAPTCHA_DEBUG=1` ile çalışır. Saf entegrasyon kanıtı için `htmls/demo-recaptcha-v2.js` 2captcha v2 demo'su üzerinde "Captcha is passed successfully!" doğrular.
 
 ## Loglama Kuralları
 

@@ -96,6 +96,17 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - CloakBrowser humanize ve geoip ayarları config üzerinden yönetilir.
 - Browser otomasyonunda mümkün olduğunca Playwright locator/selector aksiyonları kullanılmalıdır; humanize katmanını bypass eden doğrudan DOM click'lerinden kaçınılmalıdır.
 
+## Google Auth / Captcha / 2FA Kuralları
+
+- Google Auth login otomasyonu `app/Automation/googleAuthLogin.js` içindedir; cookie üretimi orchestration'ı `app/Services/googleAuthService.js` sınırında kalır.
+- 2captcha entegrasyonu iki katmana ayrılır: saf API servisi `app/Services/captchaSolverService.js` (Playwright/DOM bilmez; hem Google Auth hem Task tarafından kullanılır), browser glue `app/Automation/recaptchaSolver.js` (sitekey okuma + token enjeksiyonu). `@2captcha/captcha-solver` SDK'sı bu iki dosya dışına sızmamalıdır.
+- 2captcha API anahtarı env'den okunmaz; UI'dan gelen `captchaApiKey` ile request bazlı taşınır. Task modelinde de nullable `captchaApiKey` alanı bulunur.
+- Sitekey/`data-s` daima DOM'dan okunur (`data-sitekey`, `data-site-key`, `data-enterprise-site-key`, `data-client-signature` ve anchor iframe `&s=`); sabit sitekey gömülmez. Challenge sayfası widget render etmeden gelebileceği için sitekey gelene kadar beklenmelidir.
+- Token enjeksiyonunda `innerHTML` ataması yasaktır (Google signin Trusted Types zorlar); sadece `.value`/`.textContent` kullanılır, ardından `getResponse` override edilir ve tüm reCAPTCHA `callback`'leri tetiklenir. Uzun enterprise çözümünde sayfa reload yarışına karşı enjeksiyon retry'lı olmalıdır.
+- TOTP (2FA) kodu pencere-güvenli üretilmelidir: 30 sn pencere sınırında bayatlamayı önlemek için input görünür olduktan sonra üretilir, az süre kaldıysa sonraki pencereye geçilir, "Wrong code" tespit edilirse taze kodla retry edilir.
+- Captcha ve 2FA akışının tüm adımları event olarak loglanmalı; gerçek sorun loglardan teşhis edilebilmelidir.
+- Google'ın kendi giriş captcha'sı (Enterprise + data-s + resim bulmaca) token-enjeksiyonu için güvenilmez kabul edilir; prod yaklaşımı temiz proxy + temiz hesapla captcha'yı hiç tetiklememektir.
+
 ## Google Search URL Kuralları
 
 Google arama URL davranışında BrightData'nın Google Search URL Parameters referansı esas alınmalıdır:

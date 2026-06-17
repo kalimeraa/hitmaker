@@ -159,6 +159,41 @@ JSON dosya formatı:
 }
 ```
 
+### Captcha Çözümü (2captcha)
+
+Google login akışında reCAPTCHA çıkarsa 2captcha ile otomatik çözülmeye çalışılır.
+
+- `2captcha API anahtarı` Google Auth sekmesindeki alandan girilir; env'den okunmaz, request bazlı taşınır. Boşsa otomatik çözüm denenmez.
+- İki katman: saf API entegrasyonu `app/Services/captchaSolverService.js`, browser glue (sitekey okuma + token enjeksiyonu) `app/Automation/recaptchaSolver.js`.
+- Sitekey ve `data-s` (`data-client-signature` / anchor iframe `&s=`) her zaman DOM'dan okunur; enterprise/invisible otomatik algılanır. Challenge sayfası widget'ı geç render edebileceği için sitekey gelene kadar ~25 sn beklenir.
+- Çözülen token `g-recaptcha-response` alanına yazılır (yalnızca `.value`/`.textContent`; Google'ın Trusted Types politikası nedeniyle `innerHTML` kullanılmaz), `grecaptcha.getResponse` override edilir ve reCAPTCHA callback'leri tetiklenir. Uzun enterprise çözümünde sayfa reload yarışına karşı enjeksiyon retry'lıdır; 2captcha'ya giden ağ koparsa süre dolana dek tekrar denenir.
+
+**Önemli operasyonel not:** 2captcha standart reCAPTCHA v2 sitelerini güvenilir çözer, ancak Google'ın **kendi giriş ekranındaki** Enterprise + data-s captcha'sı (tıklayınca resim bulmacasına dönüşür) çoğu zaman çözülemez (`unable to solve after 3 attempts`) ve token gelse bile Google sunucu tarafında risk/oturum doğrulamasıyla reddedebilir. Bu, Google login'ine özgü bir kısıttır. **Önerilen yaklaşım: captcha'yı çözmeye çalışmak yerine temiz residential/mobil proxy + temiz/ısınmış hesap kullanarak captcha'nın hiç çıkmamasını sağlamak; captcha çıkan hesabı "yanmış" sayıp rotate etmek.**
+
+### 2FA (TOTP)
+
+- `2FA secret` (base32, boşluklu format desteklenir) varsa Google'ın 2 Adımlı Doğrulama ekranı otomatik geçilir.
+- TOTP kodu 30 sn pencerede geçerlidir; sınırda bayatlayıp "Wrong code" vermemesi için kod, input görünür olduktan sonra üretilir ve pencerede az süre kaldıysa bir sonraki pencereye geçilir.
+- "Wrong code" tespit edilirse input temizlenip taze kodla en fazla 3 deneme yapılır. Her adım (`2fa_window_wait`, `2fa_code_generated`, `2fa_submitted`, `2fa_result`) loglanır.
+
+### Görünür/Manuel Test Scriptleri
+
+`htmls/` altında, görünür browser ile captcha/2FA/proxy davranışını incelemek için yardımcı scriptler vardır (secret'lar repo'ya yazılmaz, env'den okunur):
+
+```bash
+# Tek hesap, proxy ile tam login (captcha + 2FA dahil)
+GAUTH_EMAIL=... GAUTH_PASSWORD=... GAUTH_2FA="aaaa bbbb ..." \
+GAUTH_PROXY="http://user:pass@host:port" \
+CAPTCHA_API_KEY=... CAPTCHA_DEBUG=1 node htmls/smoke-google-auth.js
+
+# Hesap listesinde captcha çıkana kadar dene (ACCOUNTS_FILE: [{email,password,twoFa}])
+ACCOUNTS_FILE=/tmp/accounts.json GAUTH_PROXY="..." \
+CAPTCHA_API_KEY=... CAPTCHA_DEBUG=1 node htmls/captcha-hunt.js
+
+# Saf entegrasyon kanıtı: 2captcha reCAPTCHA v2 demo'su -> "Captcha is passed successfully!"
+CAPTCHA_API_KEY=... CAPTCHA_DEBUG=1 node htmls/demo-recaptcha-v2.js
+```
+
 ### Toplu İndirme ve Silme
 
 Google Auth toolbar aksiyonları:

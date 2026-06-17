@@ -1159,10 +1159,34 @@ events.addEventListener("log.created", (event) => {
 
 candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
 taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
+function syncTaskEditModalBodyHeight() {
+  const modal = document.getElementById("taskEditModal");
+  const body = modal && modal.querySelector(".modal-body");
+  const header = modal && modal.querySelector(".modal-header");
+  const footer = modal && modal.querySelector(".modal-footer");
+  if (!modal || !body || !header || !footer) return;
+
+  const margin = 24;
+  const available = Math.max(window.innerHeight - header.offsetHeight - footer.offsetHeight - margin, 220);
+  body.style.maxHeight = `${available}px`;
+  body.style.overflowY = "auto";
+}
 $("#taskEditModal").on("shown.bs.modal", () => {
   const modalBody = document.querySelector("#taskEditModal .modal-body");
   if (modalBody) {
     modalBody.scrollTop = 0;
+  }
+  syncTaskEditModalBodyHeight();
+});
+$("#taskEditModal").on("hidden.bs.modal", () => {
+  const modalBody = document.querySelector("#taskEditModal .modal-body");
+  if (modalBody) {
+    modalBody.style.maxHeight = "";
+  }
+});
+window.addEventListener("resize", () => {
+  if (document.body.classList.contains("modal-open") && document.getElementById("taskEditModal")?.classList.contains("show")) {
+    syncTaskEditModalBodyHeight();
   }
 });
 syncCookieSource("create");
