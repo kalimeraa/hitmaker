@@ -137,7 +137,7 @@ Her hesap satırındaki `Çerez üret` butonu tek hesap için login akışını 
 
 - `Çerez üretim proxy`: O üretim için geçici proxy. Doluysa hesap proxy'sinin önüne geçer.
 - `Ekran`: Desktop veya mobil viewport.
-- `Headless`: Açık ise browser görünmez. reCAPTCHA gibi manuel challenge beklenen durumlarda kapalı kullanılmalıdır.
+- `Headless`: Açık ise browser görünmez. Manuel doğrulama gereken durumlarda kapalı kullanılmalıdır.
 
 Başarılı üretimde:
 
@@ -180,18 +180,6 @@ Toplu silme endpoint'i:
 DELETE /api/google-auth
 ```
 
-### reCAPTCHA ve Challenge Davranışı
-
-Google login sırasında reCAPTCHA çıkarsa otomatik çözüm yapılmaz. Visible browser modunda otomasyon manuel çözüm için bekler. Kullanıcı reCAPTCHA'yı elle tamamladıktan sonra akış kaldığı yerden devam eder.
-
-Headless modda reCAPTCHA algılanırsa hesap hata durumuna düşer:
-
-```text
-google_recaptcha_required
-```
-
-Bu davranış özellikle toplu üretimde önemlidir. Challenge'a düşen hesap atlanır, diğer hesaplar denenebilir. Güvenlik nedeniyle CAPTCHA bypass servisi entegrasyonu yapılmaz.
-
 ### API Endpointleri
 
 Google Auth route'ları `/api/google-auth` altında çalışır:
@@ -216,8 +204,6 @@ DELETE /api/google-auth
 - `google_auth_email_step_completed`
 - `google_auth_password_step_started`
 - `google_auth_password_step_completed`
-- `google_auth_recaptcha_required`
-- `google_auth_recaptcha_completed`
 - `google_auth_cookies_collected`
 - `google_auth_cookie_generation_completed`
 - `google_auth_cookie_bundle_created`

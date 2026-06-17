@@ -70,6 +70,45 @@ Controller'a iş kuralı, repository'ye workflow, model'e queue/browser logic ya
 - Cookie uygulamak için hedefe ön navigation yapılmaz; cookie varsa Playwright context'e domain bazlı eklenir.
 - Google SERP kullanıcı tarayıcısından farklı olabilir. Bu yüzden `google_results_candidates_seen`, match ve not_found logları korunmalıdır.
 
+## Google Auth Kuralları
+
+- Google Auth sekmesi lokal hesap havuzu, cookie üretimi ve cookie dosyası yönetimi içindir.
+- Hesaplar tek tek elle kaydedilebilir veya dosyadan import edilebilir.
+- Import formatları `.xlsx`, `.xls`, `.csv`, `.tsv` ve `.txt`'dir.
+- Kolon eşleştirme `gmail`, `şifre/sifre`, `2fa` başlıkları üzerinden yapılır.
+- Opsiyonel kolonlar `proxy`, `proxyUrl`, `recoveryEmail`, `recoveryPassword`, `telefon/phone`, `not/note/notes` olarak okunabilir.
+- Proxy nullable'dır. Dosyada veya formda proxy yoksa akış direkt bağlantıyla devam eder.
+- Importtan sonra otomatik üretim seçilebilir. Bu durumda import edilen hesaplar sırayla cookie üretimine alınır.
+- Başarılı üretimde cookie'ler MongoDB cookie havuzuna eklenir ve ayrıca `storage/google-auth-cookies/<email>/` altında JSON dosyası olarak yazılır.
+- Tek hesap için `Dosya indir`, tüm hesaplar için `Tüm dosyaları indir` aksiyonu vardır.
+- `Tümünü sil`, yalnızca Google Auth hesap kayıtlarını MongoDB'den siler; cookie havuzu ve dosya çıktıları korunur.
+- Cookie JSON çıktısı `accountId`, `email`, `cookiePoolId`, `generatedAt`, `loginUrl` ve `cookies` alanlarını içerir.
+Google Auth HTTP endpoint'leri:
+
+```http
+GET    /api/google-auth
+POST   /api/google-auth
+POST   /api/google-auth/import
+PUT    /api/google-auth/:id
+POST   /api/google-auth/:id/cookies
+GET    /api/google-auth/:id/cookies/download
+GET    /api/google-auth/cookies/download-all
+DELETE /api/google-auth/:id
+DELETE /api/google-auth
+```
+
+Google Auth ile ilgili önemli log event'leri:
+
+- `google_auth_accounts_imported`
+- `google_auth_cookie_generation_started`
+- `google_auth_email_step_started`
+- `google_auth_email_step_completed`
+- `google_auth_password_step_started`
+- `google_auth_password_step_completed`
+- `google_auth_cookies_collected`
+- `google_auth_cookie_generation_completed`
+- `google_auth_cookie_bundle_created`
+
 ## Loglama Kuralları
 
 Her önemli aksiyon loglanır:
