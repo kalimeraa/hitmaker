@@ -260,6 +260,7 @@ function validateCookieGenerationPayload(body = {}) {
     headless,
     deviceMode,
     proxyUrl,
+    captchaApiKey: normalizeOptionalText(body.captchaApiKey).slice(0, 120),
     notes: normalizeOptionalText(body.notes).slice(0, 500)
   };
 }

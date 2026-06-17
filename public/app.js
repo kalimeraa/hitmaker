@@ -844,6 +844,7 @@ async function generateGoogleAuthAccountsSequentially(accounts) {
           headless: $("#googleAuthHeadless").is(":checked"),
           deviceMode: $("#googleAuthDeviceMode").val(),
           proxyUrl: cleanOptionalText($("#googleAuthProxyUrl").val()),
+          captchaApiKey: cleanOptionalText($("#googleAuthCaptchaApiKey").val()),
           notes: `Google auth otomatik import üretimi · ${new Date().toLocaleString()}`
         })
       });
@@ -905,6 +906,7 @@ async function generateGoogleAuthCookies(accountId, button) {
         headless: $("#googleAuthHeadless").is(":checked"),
         deviceMode: $("#googleAuthDeviceMode").val(),
         proxyUrl,
+        captchaApiKey: cleanOptionalText($("#googleAuthCaptchaApiKey").val()),
         notes: `Google auth UI üretimi · ${new Date().toLocaleString()}`
       })
     });
@@ -946,6 +948,7 @@ $("#taskForm").on("submit", async function (event) {
         headless: $("#headless").is(":checked"),
         deviceMode: $("#deviceMode").val(),
         proxyUrl: cleanOptionalText($("#proxyUrl").val()),
+        captchaApiKey: cleanOptionalText($("#captchaApiKey").val()),
         ...cookiePayload
       })
     });
@@ -1156,6 +1159,12 @@ events.addEventListener("log.created", (event) => {
 
 candidateModal = new bootstrap.Modal(document.getElementById("candidateModal"));
 taskEditModal = new bootstrap.Modal(document.getElementById("taskEditModal"));
+$("#taskEditModal").on("shown.bs.modal", () => {
+  const modalBody = document.querySelector("#taskEditModal .modal-body");
+  if (modalBody) {
+    modalBody.scrollTop = 0;
+  }
+});
 syncCookieSource("create");
 syncCookieSource("edit");
 syncProxyPreview("create");

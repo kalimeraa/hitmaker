@@ -202,7 +202,33 @@ async function goToNextResultPageByStartParam(page, onEvent) {
 
 async function noop() {}
 
-async function findResultAcrossPages(page, target, maxPages, onEvent = noop) {
+// Google's /sorry block page carries a standard reCAPTCHA — if a 2captcha key is set, solve it and
+// continue the search instead of giving up. Returns true when the block was cleared.
+async function solveGoogleSorryCaptcha(page, captchaApiKey, onEvent = noop) {
+  const { solveRecaptchaOnPage, hasApiKey } = require("./recaptchaSolver");
+  if (!hasApiKey(captchaApiKey)) {
+    return false;
+  }
+
+  await onEvent("google_results_captcha_solve_attempt", { url: page.url() });
+  const solve = await solveRecaptchaOnPage(page, { apiKey: captchaApiKey, onEvent });
+  if (!solve.success) {
+    await onEvent("google_results_captcha_solve_failed", { url: page.url(), error: solve.error });
+    return false;
+  }
+
+  const submit = page.locator("button:has-text('Submit'), button#recaptcha-demo-submit, input[type='submit'], button[type='submit']").first();
+  if (await submit.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await submit.click({ timeout: 8000 }).catch(() => {});
+  }
+  await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+
+  const cleared = !isGoogleChallengeUrl(page.url());
+  await onEvent("google_results_captcha_solve_result", { url: page.url(), cleared });
+  return cleared;
+}
+
+async function findResultAcrossPages(page, target, maxPages, onEvent = noop, { captchaApiKey = "" } = {}) {
   for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
     await onEvent("google_results_page_check_started", {
       pageNumber,
@@ -212,9 +238,12 @@ async function findResultAcrossPages(page, target, maxPages, onEvent = noop) {
     });
 
     if (isGoogleChallengeUrl(page.url())) {
-      await onEvent("google_results_blocked_by_google", { pageNumber, url: page.url() });
-      await onEvent("google_results_candidates_seen", { pageNumber, candidates: [] });
-      return { matchedUrl: null, resultPage: pageNumber, blockedByGoogle: true };
+      const recovered = await solveGoogleSorryCaptcha(page, captchaApiKey, onEvent);
+      if (!recovered) {
+        await onEvent("google_results_blocked_by_google", { pageNumber, url: page.url() });
+        await onEvent("google_results_candidates_seen", { pageNumber, candidates: [] });
+        return { matchedUrl: null, resultPage: pageNumber, blockedByGoogle: true };
+      }
     }
 
     const match = await findResultLinkAfterScroll(page, target);

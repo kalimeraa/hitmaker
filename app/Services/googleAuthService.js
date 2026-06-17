@@ -330,6 +330,7 @@ class GoogleAuthService {
       headless: options.headless,
       deviceMode: options.deviceMode,
       proxyUrl: options.proxyUrl || account.proxyUrl || "",
+      captchaApiKey: options.captchaApiKey || "",
       onEvent: async (event, meta = {}) => {
         logger.info(event, {
           accountId: String(account._id),

@@ -451,6 +451,18 @@ h2 {
   color: #8a5d00;
 }
 
+.task-edit-modal-dialog {
+  max-width: min(980px, calc(100vw - 24px));
+}
+
+.task-edit-modal-dialog .modal-content {
+  max-height: calc(100dvh - 24px);
+}
+
+.task-edit-modal-dialog .modal-body {
+  overflow-y: auto;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     width: min(100% - 20px, 100%);

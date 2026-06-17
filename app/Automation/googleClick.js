@@ -37,6 +37,14 @@ function isGoogleResponseCodeFailure(error) {
   return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
 }
 
+function isSslNavigationError(error) {
+  const message = String(error && error.message || "");
+  return /ERR_CERT_|ERR_SSL_|ERR_QUIC_PROTOCOL_ERROR/i.test(message)
+    || /Your connection is not private/i.test(message)
+    || /Privacy error/i.test(message)
+    || /certificate/i.test(message);
+}
+
 function proxyHost(proxyUrl) {
   if (!proxyUrl) return "";
 
@@ -74,12 +82,18 @@ async function navigateToTargetWithRetry(page, matchedUrl, onEvent, shouldCancel
       return;
     } catch (error) {
       lastError = error;
+      const sslError = isSslNavigationError(error);
       await onEvent("target_navigation_attempt_failed", {
         matchedUrl,
         attempt,
         attempts,
-        error: error.message
+        error: error.message,
+        sslError
       });
+
+      if (sslError) {
+        return { sslError: true, error };
+      }
 
       if (attempt < attempts) {
         await runCancellable(() => page.waitForTimeout(1200 + Math.floor(Math.random() * 1600)), shouldCancel);
@@ -142,7 +156,7 @@ async function logProxyExitIp(page, proxyUrl, onEvent, shouldCancel) {
   }
 }
 
-async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, cookies, onEvent = noop, shouldCancel = neverCancelled }) {
+async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, captchaApiKey = "", cookies, onEvent = noop, shouldCancel = neverCancelled }) {
   const target = normalizeTarget(targetAddress);
   const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
 
@@ -183,7 +197,7 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMo
     }
     await acceptConsentIfPresent(page);
 
-    const { matchedUrl, resultPage, resultRank, blockedByGoogle, noResults, error } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
+    const { matchedUrl, resultPage, resultRank, blockedByGoogle, noResults, error } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent, { captchaApiKey });
 
     if (blockedByGoogle) {
       return { status: "blocked_by_google", matchedUrl: null, resultPage, googleBlocked: true };
@@ -194,7 +208,24 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMo
     }
 
     await onEvent("target_navigation_started", { matchedUrl, resultPage, resultRank });
-    await navigateToTargetWithRetry(page, matchedUrl, onEvent, shouldCancel);
+    const navigationResult = await navigateToTargetWithRetry(page, matchedUrl, onEvent, shouldCancel);
+    if (navigationResult && navigationResult.sslError) {
+      await onEvent("target_navigation_ssl_error", {
+        matchedUrl,
+        resultPage,
+        resultRank,
+        error: navigationResult.error.message
+      });
+      return {
+        status: "failed",
+        matchedUrl,
+        resultPage,
+        resultRank,
+        googleBlocked: false,
+        retryable: false,
+        error: navigationResult.error.message
+      };
+    }
     await runCancellable(() => page.waitForTimeout(2000), shouldCancel);
     await scrollTargetPageLikeHuman(page, onEvent, shouldCancel);
     await onEvent("target_navigation_completed", { matchedUrl, resultPage, resultRank, finalUrl: page.url() });

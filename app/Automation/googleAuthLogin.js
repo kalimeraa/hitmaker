@@ -1,6 +1,7 @@
 const speakeasy = require("speakeasy");
 const { taskTimeoutMs } = require("../../config/app");
 const { launchBrowserContext } = require("./cloakBrowserClient");
+const { solveRecaptchaOnPage, hasApiKey } = require("./recaptchaSolver");
 
 const DEFAULT_LOGIN_URL = "https://accounts.google.com/signin/v2/identifier?service=mail";
 const GOOGLE_COOKIE_URLS = [
@@ -43,6 +44,31 @@ function generateTotp(twoFaSecret) {
   } catch (error) {
     return { success: false, error: error.message || "two_fa_code_not_generated" };
   }
+}
+
+// Seconds left in the current 30s TOTP window.
+function totpSecondsRemaining(step = 30) {
+  return step - (Math.floor(Date.now() / 1000) % step);
+}
+
+// A TOTP code is only valid for the rest of its 30s window. If we generate one with little time
+// left, it can expire between fill and submit → Google shows "Wrong code". So when the window is
+// about to roll, wait for the next one, then generate a fresh code that stays valid through submit.
+async function generateTotpWindowSafe(twoFaSecret, onEvent = async () => {}, minRemainingMs = 6000) {
+  const remainingMs = totpSecondsRemaining() * 1000;
+  if (remainingMs < minRemainingMs) {
+    await onEvent("google_auth_2fa_window_wait", { remainingMs });
+    await delay(remainingMs + 500);
+  }
+  const result = generateTotp(twoFaSecret);
+  result.secondsRemaining = totpSecondsRemaining();
+  return result;
+}
+
+// Detects Google's "Wrong code. Try again." (and localized) error on the 2FA page.
+async function detectWrongTotpCode(page) {
+  const text = await page.evaluate(() => document.body.innerText).catch(() => "");
+  return /Wrong code|Yanlış kod|incorrect code|hatalı kod|try again|tekrar deneyin/i.test(text);
 }
 
 function isRecaptchaChallengeUrl(url = "") {
@@ -276,47 +302,146 @@ async function chooseTotpChallengeIfNeeded(page) {
   }
 }
 
-async function handleTwoFactorChallenge(page, twoFaSecret) {
+async function handleTwoFactorChallenge(page, twoFaSecret, onEvent = async () => {}) {
   const challenge = await detectTwoFactorChallenge(page);
   if (!challenge) {
     return { success: true, handled: false };
   }
+  await onEvent("google_auth_2fa_challenge_detected", { url: challenge.url, reason: challenge.reason });
 
-  const codeResult = generateTotp(twoFaSecret);
-  if (!codeResult.success) {
-    return {
-      success: false,
-      error: codeResult.error,
-      failureReason: "2fa_challenge",
-      url: challenge.url
-    };
+  if (!normalizeTwoFaSecret(twoFaSecret)) {
+    return { success: false, error: "two_fa_secret_missing", failureReason: "2fa_challenge", url: challenge.url };
   }
 
   const totpSelector = "input#totpPin, input[name='totpPin'], input[autocomplete='one-time-code'], input[type='tel']";
   await chooseTotpChallengeIfNeeded(page);
   await page.waitForSelector(totpSelector, { state: "visible", timeout: 30000 });
-  await fillAndVerify(page.locator(totpSelector).first(), codeResult.code);
-  await clickNext(page);
-  await page.waitForLoadState("domcontentloaded", { timeout: taskTimeoutMs }).catch(() => {});
-  await randomDelay(900, 1800);
-  await dismissOptionalPrompts(page);
 
-  return { success: true, handled: true };
+  // Wrong TOTP codes happen "sometimes" because of window-boundary staleness, so generate a fresh
+  // window-safe code per attempt and retry if Google rejects it. Every step is logged.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (page.isClosed()) break;
+
+    const codeResult = await generateTotpWindowSafe(twoFaSecret, onEvent);
+    if (!codeResult.success) {
+      await onEvent("google_auth_2fa_code_failed", { attempt, error: codeResult.error });
+      return { success: false, error: codeResult.error, failureReason: "2fa_challenge", url: page.url() };
+    }
+    await onEvent("google_auth_2fa_code_generated", {
+      attempt,
+      codeMasked: `${codeResult.code.slice(0, 2)}****`,
+      secondsRemaining: codeResult.secondsRemaining
+    });
+
+    const input = page.locator(totpSelector).first();
+    await input.fill("").catch(() => {});
+    await fillAndVerify(input, codeResult.code);
+    await onEvent("google_auth_2fa_code_filled", { attempt });
+    await clickNext(page);
+    await onEvent("google_auth_2fa_submitted", { attempt });
+    await page.waitForLoadState("domcontentloaded", { timeout: taskTimeoutMs }).catch(() => {});
+    await randomDelay(1200, 2200);
+
+    const stillOn2fa = !page.isClosed() && Boolean(await detectTwoFactorChallenge(page));
+    const wrongCode = stillOn2fa ? await detectWrongTotpCode(page) : false;
+    await onEvent("google_auth_2fa_result", {
+      attempt,
+      stillOn2fa,
+      wrongCode,
+      url: page.isClosed() ? "" : page.url()
+    });
+
+    if (!stillOn2fa) {
+      await dismissOptionalPrompts(page);
+      return { success: true, handled: true };
+    }
+    // Still blocked on the 2FA page → loop and submit a fresh window-safe code.
+  }
+
+  return {
+    success: false,
+    error: "two_fa_wrong_code",
+    failureReason: "2fa_challenge",
+    url: page.isClosed() ? challenge.url : page.url()
+  };
 }
 
-async function waitForManualRecaptchaIfNeeded(page, headless, email, onEvent, timeout = 180000) {
+async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent) {
+  if (!hasApiKey(captchaApiKey)) {
+    return { solved: false, attempted: false };
+  }
+
+  const urlBeforeSolve = page.url();
+  const solve = await solveRecaptchaOnPage(page, { apiKey: captchaApiKey, onEvent });
+  if (!solve.success) {
+    return { solved: false, attempted: !solve.skipped, error: solve.error };
+  }
+
+  // Invisible reCAPTCHA auto-submits via callback; checkbox variants need the Next button.
+  await onEvent("google_auth_captcha_submit_started", { email, url: urlBeforeSolve });
+  if (await detectRecaptchaChallenge(page)) {
+    await clickNext(page).catch(() => {});
+  }
+  await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+  await randomDelay(1500, 2600);
+
+  const urlAfterSubmit = page.isClosed() ? "" : page.url();
+  const stillBlocked = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
+  await onEvent("google_auth_captcha_submit_result", {
+    email,
+    urlBefore: urlBeforeSolve,
+    urlAfter: urlAfterSubmit,
+    urlChanged: urlAfterSubmit !== urlBeforeSolve,
+    stillBlocked
+  });
+
+  if (page.isClosed() || !stillBlocked) {
+    await onEvent("google_auth_recaptcha_completed", { email, url: urlAfterSubmit, via: "2captcha" });
+    return { solved: true, attempted: true };
+  }
+
+  return { solved: false, attempted: true, error: "recaptcha_still_present_after_solve" };
+}
+
+async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, timeout = 180000) {
   const challenge = await detectRecaptchaChallenge(page);
   if (!challenge) {
     return { success: true, handled: false };
   }
 
-  await onEvent("google_auth_recaptcha_required", { email, url: challenge.url, headless });
+  await onEvent("google_auth_recaptcha_required", { email, url: challenge.url, headless, hasApiKey: hasApiKey(captchaApiKey) });
+
+  // 2captcha anahtarı varsa: DAİMA servise gidip çöz. Birkaç deneme yap, kullanıcıyı asla manuel
+  // çözüme bekletme (headless olsun olmasın).
+  if (hasApiKey(captchaApiKey)) {
+    const maxSolveAttempts = 2;
+    for (let attempt = 1; attempt <= maxSolveAttempts; attempt += 1) {
+      if (page.isClosed()) break;
+      if (!(await detectRecaptchaChallenge(page))) {
+        return { success: true, handled: true };
+      }
+      const automated = await attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent);
+      if (automated.solved) {
+        return { success: true, handled: true };
+      }
+      await onEvent("google_auth_captcha_attempt_failed", { email, attempt, maxSolveAttempts, error: automated.error });
+    }
+    return {
+      success: false,
+      error: "google_recaptcha_unsolved",
+      failureReason: "recaptcha_challenge",
+      url: page.isClosed() ? challenge.url : page.url()
+    };
+  }
+
+  // Anahtar yoksa eski davranış: headless'ta hemen fail, görünür modda manuel bekleme.
   if (headless) {
     return {
       success: false,
       error: "google_recaptcha_required",
       failureReason: "recaptcha_challenge",
-      url: challenge.url
+      url: page.isClosed() ? challenge.url : page.url()
     };
   }
 
@@ -368,7 +493,7 @@ function filterGoogleCookies(cookies) {
     .map(toCookiePayload);
 }
 
-async function generateGoogleAuthCookies({ email, password, twoFaSecret, headless, deviceMode, proxyUrl, onEvent = async () => {} }) {
+async function generateGoogleAuthCookies({ email, password, twoFaSecret, headless, deviceMode, proxyUrl, captchaApiKey = "", onEvent = async () => {} }) {
   const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
 
   try {
@@ -403,7 +528,7 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
         return { success: false, error: "google_unsafe_browser", failureReason: "unsafe_browser", url: unsafeAfterEmail.url };
       }
 
-      const recaptchaAfterEmail = await waitForManualRecaptchaIfNeeded(page, headless, email, onEvent);
+      const recaptchaAfterEmail = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
       if (!recaptchaAfterEmail.success) {
         return recaptchaAfterEmail;
       }
@@ -430,19 +555,19 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
       return { success: false, error: "google_unsafe_browser", failureReason: "unsafe_browser", url: unsafeAfterPassword.url };
     }
 
-    const recaptchaAfterPassword = await waitForManualRecaptchaIfNeeded(page, headless, email, onEvent);
+    const recaptchaAfterPassword = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
     if (!recaptchaAfterPassword.success) {
       return recaptchaAfterPassword;
     }
 
-    const twoFaResult = await handleTwoFactorChallenge(page, twoFaSecret);
+    const twoFaResult = await handleTwoFactorChallenge(page, twoFaSecret, onEvent);
     if (!twoFaResult.success) {
       await onEvent("google_auth_2fa_failed", { email, error: twoFaResult.error, url: twoFaResult.url });
       return twoFaResult;
     }
 
     await dismissOptionalPrompts(page);
-    const recaptchaAfterTwoFa = await waitForManualRecaptchaIfNeeded(page, headless, email, onEvent);
+    const recaptchaAfterTwoFa = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
     if (!recaptchaAfterTwoFa.success) {
       return recaptchaAfterTwoFa;
     }

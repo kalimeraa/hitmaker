@@ -108,6 +108,21 @@ Google Auth ile ilgili önemli log event'leri:
 - `google_auth_cookies_collected`
 - `google_auth_cookie_generation_completed`
 - `google_auth_cookie_bundle_created`
+- `google_auth_recaptcha_required`
+- `google_auth_captcha_solve_started`
+- `google_auth_captcha_solved`
+- `google_auth_captcha_solve_failed`
+- `google_auth_recaptcha_completed`
+
+## Captcha Çözüm Kuralları
+
+- Google Auth login akışındaki reCAPTCHA, 2captcha servisi (`@2captcha/captcha-solver`) ile otomatik çözülür.
+- 2captcha entegrasyonu yalnızca `app/Automation/recaptchaSolver.js` içinde izole edilir; SDK başka katmana sızmaz.
+- 2captcha API anahtarı env'den okunmaz. Google Auth sekmesindeki `2captcha API anahtarı` alanından girilir ve çerez üretim isteğiyle (`captchaApiKey`) birlikte servise taşınır.
+- API anahtarı boşsa otomatik çözüm denenmez; akış mevcut recaptcha davranışına düşer.
+- Sitekey ve `data-s` her zaman DOM'dan okunur; sabit sitekey kullanılmaz. Enterprise/invisible varyantları otomatik algılanır.
+- Çözülen token `g-recaptcha-response` alanına yazılır ve mümkünse reCAPTCHA callback'i tetiklenir.
+- Otomatik çözüm başarısız olursa headless modda akış `recaptcha_challenge` ile durur; non-headless modda mevcut manuel bekleme path'i korunur.
 
 ## Loglama Kuralları
 

@@ -68,6 +68,7 @@ const taskSchema = new mongoose.Schema(
     headless: { type: Boolean, default: true },
     deviceMode: { type: String, enum: ["desktop", "mobile"], default: "desktop" },
     proxyUrl: String,
+    captchaApiKey: String,
     useCookiePool: { type: Boolean, default: false },
     cookies: [cookieSchema],
     cookieSets: [

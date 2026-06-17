@@ -44,6 +44,10 @@ function isGoogleResponseCodeFailure(error) {
   return String(error && error.message || "").includes("ERR_HTTP_RESPONSE_CODE_FAILURE");
 }
 
+function isNonRetryableAutomationResult(result) {
+  return Boolean(result && result.retryable === false);
+}
+
 function selectCookieSetFromList(cookieSets, runIndex, attemptsBeforeRun = 0) {
   if (!cookieSets.length) return null;
   const cookieSetIndex = (Number(runIndex) + Number(attemptsBeforeRun || 0)) % cookieSets.length;
@@ -153,6 +157,7 @@ class TaskRunService {
           headless: task.headless,
           deviceMode: task.deviceMode || "desktop",
           proxyUrl: task.proxyUrl,
+          captchaApiKey: task.captchaApiKey || "",
           cookies: selectedCookies.cookies,
           onEvent: async (event, meta = {}) => {
             logAutomationEvent(event, meta);
@@ -237,7 +242,7 @@ class TaskRunService {
           return;
         }
 
-        if (!isSuccessfulResult(result) && attemptNumber < maxAttempts) {
+        if (!isSuccessfulResult(result) && !isNonRetryableAutomationResult(result) && attemptNumber < maxAttempts) {
           if (result.googleBlocked) {
             await cookiePoolService.markBroken(selectedCookies.cookiePoolId, result.status || "blocked_by_google");
           }

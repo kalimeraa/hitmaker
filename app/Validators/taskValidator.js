@@ -284,6 +284,7 @@ function validateCreateTaskPayload(body) {
     headless: Boolean(body.headless),
     deviceMode: parseDeviceMode(body.deviceMode),
     proxyUrl: normalizeProxyUrl(body.proxyUrl),
+    captchaApiKey: normalizeOptionalText(body.captchaApiKey).slice(0, 120),
     useCookiePool: Boolean(body.useCookiePool),
     cookies: cookiePayload.cookies,
     cookieSets: cookiePayload.cookieSets
