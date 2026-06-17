@@ -72,6 +72,156 @@ Bu kurallar `AGENTS.md`, `CODEX.md` ve `CLAUDE.md` içinde de proje kuralı olar
 - Loglar `log.created` SSE event'i ile anlık prepend edilir. Error log gelirse `Hatalar` sekmesi de anlık güncellenir.
 - Manuel refresh/polling ana akış değildir.
 
+## Google Auth ve Cookie Üretimi
+
+Google Auth sekmesi, Gmail hesaplarını lokal dosyadan import edip Google login akışıyla cookie üretmek için kullanılır. Bu akış local/visible browser kullanımına göre tasarlanmıştır.
+
+### Hesap Kaydı
+
+Tek hesap elle eklenebilir veya düzenlenebilir. Form alanları:
+
+- `Google email`: Gmail hesabı.
+- `Şifre`: Gmail şifresi.
+- `2FA secret`: Google Authenticator base32 secret. Boşluklu format desteklenir.
+- `Hesap proxy`: Bu hesaba özel opsiyonel proxy. Boş kalabilir.
+- `Recovery email`, `Recovery şifre`, `Telefon`, `Not`: Opsiyonel metadata.
+- `Durum`: `active` veya `disabled`.
+
+Proxy nullable'dır. Hesapta proxy yoksa ve üretim sırasında global proxy verilmezse login direkt bağlantıyla denenir.
+
+### XLSX/CSV/TSV Import
+
+Google Sheets dosyası local olarak indirilip import edilebilir. Desteklenen formatlar:
+
+- `.xlsx`
+- `.xls`
+- `.csv`
+- `.tsv`
+- `.txt`
+
+Beklenen kolon başlıkları:
+
+```text
+gmail | şifre/sifre | 2fa
+```
+
+Örnek tablo:
+
+```text
+gmail                    şifre       2fa
+ebrusoylu416@gmail.com   12cca32aa   xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+```
+
+Kolon eşleştirme case-insensitive yapılır ve Türkçe karakterler normalize edilir. `şifre` ve `sifre` aynı kabul edilir.
+
+Opsiyonel kolonlar:
+
+- `proxy` veya `proxyUrl`
+- `recoveryEmail`
+- `recoveryPassword`
+- `telefon` veya `phone`
+- `not`, `note` veya `notes`
+
+Import sırasında ayrıca UI'dan `Tek proxy` veya `Proxy listesi` verilebilir. Proxy seçimi önceliği:
+
+1. Dosya içindeki `proxy` kolonu.
+2. UI'daki proxy listesi; hesaplara sırayla dağıtılır.
+3. UI'daki tek proxy.
+4. Boş proxy.
+
+`Importtan sonra otomatik üret` açılırsa import edilen hesaplar sırayla cookie üretimine alınır. Kapalıysa sadece DB'ye hesap olarak kaydedilir.
+
+### Cookie Üretimi
+
+Her hesap satırındaki `Çerez üret` butonu tek hesap için login akışını başlatır. Üretim seçenekleri:
+
+- `Çerez üretim proxy`: O üretim için geçici proxy. Doluysa hesap proxy'sinin önüne geçer.
+- `Ekran`: Desktop veya mobil viewport.
+- `Headless`: Açık ise browser görünmez. reCAPTCHA gibi manuel challenge beklenen durumlarda kapalı kullanılmalıdır.
+
+Başarılı üretimde:
+
+- Cookie'ler MongoDB'de cookie havuzuna eklenir.
+- JSON dosyası `storage/google-auth-cookies/<email>/` altında oluşturulur.
+- Hesap satırında son cookie pool ID'si, dosya adı ve dosya yolu görünür.
+- `Dosya indir` butonu tek hesabın son cookie JSON dosyasını indirir.
+
+JSON dosya formatı:
+
+```json
+{
+  "accountId": "...",
+  "email": "user@gmail.com",
+  "cookiePoolId": "...",
+  "generatedAt": "2026-06-17T17:39:05.963Z",
+  "loginUrl": "https://myaccount.google.com/",
+  "cookies": []
+}
+```
+
+### Toplu İndirme ve Silme
+
+Google Auth toolbar aksiyonları:
+
+- `Tüm dosyaları indir`: Son cookie dosyası olan tüm hesapları ZIP olarak indirir.
+- `Tümünü sil`: Tüm Google Auth hesap kayıtlarını MongoDB'den siler.
+
+`Tümünü sil`, cookie havuzundaki üretilmiş cookie kayıtlarını veya `storage/google-auth-cookies` altındaki dosyaları silmez. Sadece Google Auth hesap listesini temizler.
+
+Toplu ZIP endpoint'i:
+
+```http
+GET /api/google-auth/cookies/download-all
+```
+
+Toplu silme endpoint'i:
+
+```http
+DELETE /api/google-auth
+```
+
+### reCAPTCHA ve Challenge Davranışı
+
+Google login sırasında reCAPTCHA çıkarsa otomatik çözüm yapılmaz. Visible browser modunda otomasyon manuel çözüm için bekler. Kullanıcı reCAPTCHA'yı elle tamamladıktan sonra akış kaldığı yerden devam eder.
+
+Headless modda reCAPTCHA algılanırsa hesap hata durumuna düşer:
+
+```text
+google_recaptcha_required
+```
+
+Bu davranış özellikle toplu üretimde önemlidir. Challenge'a düşen hesap atlanır, diğer hesaplar denenebilir. Güvenlik nedeniyle CAPTCHA bypass servisi entegrasyonu yapılmaz.
+
+### API Endpointleri
+
+Google Auth route'ları `/api/google-auth` altında çalışır:
+
+```http
+GET    /api/google-auth
+POST   /api/google-auth
+POST   /api/google-auth/import
+PUT    /api/google-auth/:id
+POST   /api/google-auth/:id/cookies
+GET    /api/google-auth/:id/cookies/download
+GET    /api/google-auth/cookies/download-all
+DELETE /api/google-auth/:id
+DELETE /api/google-auth
+```
+
+Önemli event/log isimleri:
+
+- `google_auth_accounts_imported`
+- `google_auth_cookie_generation_started`
+- `google_auth_email_step_started`
+- `google_auth_email_step_completed`
+- `google_auth_password_step_started`
+- `google_auth_password_step_completed`
+- `google_auth_recaptcha_required`
+- `google_auth_recaptcha_completed`
+- `google_auth_cookies_collected`
+- `google_auth_cookie_generation_completed`
+- `google_auth_cookie_bundle_created`
+
 ## Gereksinimler
 
 - Node.js `>=20`
