@@ -1,5 +1,9 @@
 async function findResultLink(page, target) {
   return page.evaluate((searchTarget) => {
+    function getCandidateHref(link) {
+      return link.href || link.getAttribute("data-href") || link.getAttribute("ping") || "";
+    }
+
     function normalizePath(pathname) {
       const decoded = decodeURIComponent(String(pathname || "/"));
       const withoutTrailingSlash = decoded.replace(/\/+$/, "");
@@ -8,11 +12,11 @@ async function findResultLink(page, target) {
 
     function resolveResultHref(href) {
       try {
-        const parsed = new URL(href);
+        const parsed = new URL(href, window.location.href);
         const normalizedHost = parsed.hostname.replace(/^www\./, "").toLowerCase();
         if (!normalizedHost.includes("google.")) return href;
 
-        const urlParam = parsed.searchParams.get("url") || parsed.searchParams.get("q");
+        const urlParam = parsed.searchParams.get("url") || parsed.searchParams.get("q") || parsed.searchParams.get("u");
         if (urlParam && /^https?:\/\//i.test(urlParam)) {
           return urlParam;
         }
@@ -23,11 +27,11 @@ async function findResultLink(page, target) {
       }
     }
 
-    const links = Array.from(document.querySelectorAll("a[href]"));
+    const links = Array.from(document.querySelectorAll("a[href], a[data-href]"));
     let rank = 0;
     for (const link of links) {
-      const href = link.href;
-      if (!href || href.includes("/search?")) continue;
+      const href = getCandidateHref(link);
+      if (!href || href.includes("/search?") || href.startsWith("javascript:")) continue;
 
       try {
         const resolvedHref = resolveResultHref(href);
@@ -54,13 +58,17 @@ async function findResultLink(page, target) {
 
 async function collectResultCandidates(page, limit = 12) {
   return page.evaluate((candidateLimit) => {
+    function getCandidateHref(link) {
+      return link.href || link.getAttribute("data-href") || link.getAttribute("ping") || "";
+    }
+
     function resolveResultHref(href) {
       try {
-        const parsed = new URL(href);
+        const parsed = new URL(href, window.location.href);
         const normalizedHost = parsed.hostname.replace(/^www\./, "").toLowerCase();
         if (!normalizedHost.includes("google.")) return href;
 
-        const urlParam = parsed.searchParams.get("url") || parsed.searchParams.get("q");
+        const urlParam = parsed.searchParams.get("url") || parsed.searchParams.get("q") || parsed.searchParams.get("u");
         if (urlParam && /^https?:\/\//i.test(urlParam)) {
           return urlParam;
         }
@@ -73,13 +81,14 @@ async function collectResultCandidates(page, limit = 12) {
 
     const seen = new Set();
     const candidates = [];
-    const links = Array.from(document.querySelectorAll("a[href]"));
+    const links = Array.from(document.querySelectorAll("a[href], a[data-href]"));
 
     for (const link of links) {
       if (candidates.length >= candidateLimit) break;
-      if (!link.href || link.href.includes("/search?")) continue;
+      const href = getCandidateHref(link);
+      if (!href || href.includes("/search?") || href.startsWith("javascript:")) continue;
 
-      const resolvedHref = resolveResultHref(link.href);
+      const resolvedHref = resolveResultHref(href);
       if (!resolvedHref || seen.has(resolvedHref)) continue;
 
       try {
@@ -102,6 +111,31 @@ async function collectResultCandidates(page, limit = 12) {
 
     return candidates;
   }, limit);
+}
+
+async function detectGoogleNoResults(page) {
+  return page.evaluate(() => {
+    const text = String(document.body && document.body.innerText || "").replace(/\s+/g, " ").trim();
+    const patterns = [
+      /hiçbir sonuç bulunamadı/i,
+      /sonuç bulunamadı/i,
+      /hiçbir arama sonucu mevcut değil/i,
+      /hiçbir arama sonucu bulunamadı/i,
+      /hiçbir dokümanla eşleşmedi/i,
+      /herhangi bir dokümanla eşleşmedi/i,
+      /aramayla eşleşen sonuç bulunamadı/i,
+      /aradığınız[\s\S]{0,180}sonuç/i,
+      /aramanız[\s\S]{0,180}eşleşmedi/i,
+      /did not match any documents/i,
+      /no results found/i,
+      /no results containing all your search terms/i
+    ];
+    const matchedPattern = patterns.find((pattern) => pattern.test(text));
+    if (!matchedPattern) return null;
+
+    const start = Math.max(0, text.search(matchedPattern) - 80);
+    return text.slice(start, start + 260);
+  });
 }
 
 async function findResultLinkAfterScroll(page, target) {
@@ -191,6 +225,15 @@ async function findResultAcrossPages(page, target, maxPages, onEvent = noop) {
 
     const candidates = await retryOnDestroyedContext(() => collectResultCandidates(page));
     await onEvent("google_results_candidates_seen", { pageNumber, candidates });
+
+    if (!candidates.length) {
+      const noResultsMessage = await retryOnDestroyedContext(() => detectGoogleNoResults(page));
+      if (noResultsMessage) {
+        await onEvent("google_results_empty", { pageNumber, url: page.url(), message: noResultsMessage });
+        return { matchedUrl: null, resultPage: pageNumber, noResults: true, error: "Google bu sorgu için hiçbir sonuç döndürmedi." };
+      }
+    }
+
     await onEvent("google_results_match_not_found", { pageNumber });
 
     if (pageNumber === maxPages || !(await goToNextResultPage(page, onEvent))) {

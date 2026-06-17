@@ -1,5 +1,4 @@
 const { cloakBrowser } = require("../../config/app");
-const ProxyChain = require("proxy-chain");
 
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
@@ -12,6 +11,10 @@ const DEFAULT_CHROMIUM_ARGS = [
 
 async function loadCloakBrowser() {
   return import("cloakbrowser");
+}
+
+async function loadProxyChain() {
+  return import("proxy-chain");
 }
 
 function hasProxyCredentials(proxyUrl) {
@@ -29,11 +32,12 @@ async function anonymizeProxyIfNeeded(proxyUrl) {
     return { proxyUrl, close: async () => {} };
   }
 
-  const anonymizedProxyUrl = await ProxyChain.anonymizeProxy(proxyUrl);
+  const { anonymizeProxy, closeAnonymizedProxy } = await loadProxyChain();
+  const anonymizedProxyUrl = await anonymizeProxy(proxyUrl);
   return {
     proxyUrl: anonymizedProxyUrl,
     close: async () => {
-      await ProxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => {});
+      await closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => {});
     }
   };
 }

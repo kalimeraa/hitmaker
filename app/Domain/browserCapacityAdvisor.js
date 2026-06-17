@@ -6,13 +6,13 @@ function estimateBrowserCapacity({ cpuCores, totalMemoryMb, freeMemoryMb, maxPar
   const safeCpuCores = Math.max(1, Number(cpuCores) || 1);
   const safeTotalMemoryMb = Math.max(512, Number(totalMemoryMb) || 512);
   const safeFreeMemoryMb = Math.max(0, Number(freeMemoryMb) || 0);
-  const hardLimit = Math.max(2, Number(maxParallelBrowsers) || 2);
+  const hardLimit = Math.max(1, Number(maxParallelBrowsers) || 1);
 
   const reservedMemoryMb = Math.max(1024, Math.round(safeTotalMemoryMb * 0.25));
   const usableMemoryMb = Math.max(0, safeFreeMemoryMb - reservedMemoryMb);
-  const memoryBased = Math.max(2, Math.floor(usableMemoryMb / 900));
-  const cpuBased = Math.max(2, Math.floor(safeCpuCores * 0.75));
-  const recommended = clamp(Math.min(memoryBased, cpuBased, hardLimit), 2, hardLimit);
+  const memoryBased = Math.max(1, Math.floor(usableMemoryMb / 900));
+  const cpuBased = Math.max(1, Math.floor(safeCpuCores * 0.75));
+  const recommended = clamp(Math.min(memoryBased, cpuBased, hardLimit), 1, hardLimit);
 
   return {
     recommended,

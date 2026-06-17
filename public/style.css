@@ -92,6 +92,14 @@ h2 {
   margin-bottom: 12px;
 }
 
+.toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .live-indicator {
   display: inline-flex;
   align-items: center;
@@ -172,6 +180,56 @@ h2 {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.google-auth-form,
+.google-auth-options,
+.google-auth-import {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.google-auth-form-actions,
+.google-auth-import-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.google-auth-headless {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+
+.google-auth-list {
+  display: grid;
+  gap: 10px;
+}
+
+.google-auth-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.google-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.google-auth-file-path {
+  overflow-wrap: anywhere;
 }
 
 .run-list {
@@ -405,11 +463,18 @@ h2 {
   }
 
   .cookie-pool-import,
-  .cookie-pool-row {
+  .cookie-pool-row,
+  .google-auth-form,
+  .google-auth-import,
+  .google-auth-options,
+  .google-auth-row {
     grid-template-columns: 1fr;
   }
 
-  .cookie-pool-actions {
+  .cookie-pool-actions,
+  .google-auth-actions,
+  .google-auth-form-actions,
+  .google-auth-import-actions {
     justify-content: flex-start;
   }
 

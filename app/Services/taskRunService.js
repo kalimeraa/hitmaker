@@ -194,6 +194,12 @@ class TaskRunService {
                 googleBlocked: true
               });
             }
+            if (event === "google_results_empty") {
+              await this.repository.updateRun(task._id, index, {
+                lastGoogleUrl: meta.url,
+                error: meta.message || "Google bu sorgu için hiçbir sonuç döndürmedi."
+              });
+            }
             if (event === "google_search_navigation_failed") {
               await this.repository.updateRun(task._id, index, {
                 lastGoogleUrl: meta.url || meta.searchUrl,
@@ -216,6 +222,21 @@ class TaskRunService {
         }
         }), taskTimeoutMs + 5000);
 
+        if (result.noResults) {
+          await finishRun(task._id, index, {
+            status: result.status,
+            matchedUrl: result.matchedUrl,
+            resultPage: result.resultPage,
+            resultRank: result.resultRank,
+            googleBlocked: false,
+            error: result.error || "Google bu sorgu için hiçbir sonuç döndürmedi.",
+            finishedAt: new Date()
+          });
+          await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_completed", runIndex: index });
+          logAutomationEvent("task_run_completed", { ...result, attempt: attemptNumber, maxAttempts, retrySkipped: true });
+          return;
+        }
+
         if (!isSuccessfulResult(result) && attemptNumber < maxAttempts) {
           if (result.googleBlocked) {
             await cookiePoolService.markBroken(selectedCookies.cookiePoolId, result.status || "blocked_by_google");
@@ -226,7 +247,7 @@ class TaskRunService {
             resultPage: result.resultPage,
             resultRank: result.resultRank,
             googleBlocked: Boolean(result.googleBlocked),
-            error: `attempt ${attemptNumber}/${maxAttempts} ${result.status}`,
+            error: result.error || `attempt ${attemptNumber}/${maxAttempts} ${result.status}`,
             finishedAt: new Date()
           });
           await realtimeEventService.publish("task.updated", { taskId: String(task._id), action: "run_auto_retry_queued", runIndex: index });
@@ -240,6 +261,7 @@ class TaskRunService {
           resultPage: result.resultPage,
           resultRank: result.resultRank,
           googleBlocked: Boolean(result.googleBlocked),
+          error: result.error || "",
           finishedAt: new Date()
         });
         if (result.googleBlocked) {

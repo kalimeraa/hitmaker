@@ -64,10 +64,10 @@ function parseMaxAttempts(value) {
 }
 
 function parseMaxConcurrentBrowsers(value) {
-  if (value === "" || typeof value === "undefined" || value === null) return 2;
+  const maxAllowed = Math.max(1, Number(maxParallelBrowsers) || 1);
+  if (value === "" || typeof value === "undefined" || value === null) return Math.min(2, maxAllowed);
 
   const maxConcurrentBrowsers = Number(value);
-  const maxAllowed = Math.max(2, Number(maxParallelBrowsers) || 2);
   if (!Number.isInteger(maxConcurrentBrowsers) || maxConcurrentBrowsers < 1 || maxConcurrentBrowsers > maxAllowed) {
     throw new HttpError(400, `Concurrent browsers must be an integer between 1 and ${maxAllowed}`);
   }

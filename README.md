@@ -117,7 +117,7 @@ Script davranışı:
 - Local MongoDB portu kapalıysa `mongodb-community`, `mongodb-community@7.0`, `mongodb-community@6.0` servis adlarını dener.
 - `PORT` varsayılanı `3100` olur.
 - `HEADLESS_DEFAULT=false` olur; formdaki `Headless` switch'i kapalı gelir.
-- `MAX_PARALLEL_BROWSERS=2` olur; görünür browser testinde varsayılan olarak en fazla iki pencere paralel açılır.
+- `MAX_PARALLEL_BROWSERS=1` olur; görünür browser testinde varsayılan olarak en fazla bir pencere açılır.
 - App ve worker aynı terminalden başlar. Ctrl+C veya `killall node` ikisini de kapatır.
 
 Görünür desktop modunda CloakBrowser Chromium `--start-maximized` ile açılır ve viewport gerçek pencere boyutuna bırakılır. Mobil ekran seçilirse pencere `390x844` açılır ve context mobil viewport/touch ayarlarıyla başlar.
@@ -276,7 +276,7 @@ Railway Variables ekranında minimum önerilen değişkenler:
 ```text
 QUEUE_NAME=browser-tasks
 HEADLESS_DEFAULT=true
-MAX_PARALLEL_BROWSERS=2
+MAX_PARALLEL_BROWSERS=1
 CLOAKBROWSER_AUTO_UPDATE=false
 AUTH_USERNAME=hitmaker
 AUTH_PASSWORD=<strong-password>

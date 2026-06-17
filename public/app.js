@@ -7,6 +7,7 @@ const runPageSize = 10;
 let taskPage = 1;
 let allTasks = [];
 let allCookies = [];
+let allGoogleAuthAccounts = [];
 let browserCapacity = null;
 const runPages = new Map();
 let pendingTaskLoad = null;
@@ -207,6 +208,27 @@ function readTextFile(file) {
   });
 }
 
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || "");
+      resolve(value.includes(",") ? value.split(",").pop() : value);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Dosya okunamadı"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function isSpreadsheetFile(file) {
+  const name = String(file && file.name || "").toLowerCase();
+  const type = String(file && file.type || "").toLowerCase();
+  return name.endsWith(".xlsx")
+    || name.endsWith(".xls")
+    || type.includes("spreadsheet")
+    || type.includes("excel");
+}
+
 function cookieGroupFor(scope) {
   return $(`[data-cookie-input-group="${scope}"]`);
 }
@@ -309,7 +331,19 @@ function findTaskRun(taskId, runIndex) {
   return { task, run: task.runs[Number(runIndex)] || null };
 }
 
-function renderCandidateList(candidates) {
+function renderCandidateEmptyState(run) {
+  if (run.googleBlocked) {
+    return "Google bu run sırasında challenge/captcha/sorry sayfası döndürdü. Cookie veya IP değiştirmek gerekir.";
+  }
+
+  if (String(run.error || "").toLowerCase().includes("hiçbir sonuç") || String(run.error || "").toLowerCase().includes("no results")) {
+    return "Google bu sorgu için kendi sayfasında hiçbir sonuç bulunamadığını gösterdi.";
+  }
+
+  return "Bu run sırasında aday adres kaydı yok. Google farklı bir SERP varyasyonu, consent/challenge veya parser dışı bir sonuç formatı döndürmüş olabilir.";
+}
+
+function renderCandidateList(candidates, run = {}) {
   const sortedCandidates = [...candidates].sort((left, right) => {
     const leftPage = Number(left.pageNumber || 0);
     const rightPage = Number(right.pageNumber || 0);
@@ -320,7 +354,9 @@ function renderCandidateList(candidates) {
   if (!sortedCandidates.length) {
     return `
       <div class="empty-state">
-        Bu run sırasında aday adres kaydı yok. Google sonuç sayfası yerine challenge, captcha veya hata sayfası dönmüş olabilir.
+        ${escapeHtml(renderCandidateEmptyState(run))}
+        ${run.lastGoogleUrl ? `<div class="task-meta mt-2">Son Google URL: ${escapeHtml(run.lastGoogleUrl)}</div>` : ""}
+        ${run.error ? `<div class="task-meta mt-1">Detay: ${escapeHtml(run.error)}</div>` : ""}
       </div>
     `;
   }
@@ -354,7 +390,7 @@ function showCandidateModal(taskId, runIndex) {
       <span>attempts: ${escapeHtml(run.attempts || 0)}/${escapeHtml(task.maxAttempts || 3)}</span>
       <span>${candidates.length} adres</span>
     </div>
-    ${renderCandidateList(candidates)}
+    ${renderCandidateList(candidates, run)}
   `);
   candidateModal.show();
 }
@@ -663,6 +699,223 @@ async function deleteCookiePoolItem(cookieId) {
   await $.ajax({ method: "DELETE", url: `/api/cookies/${encodeURIComponent(cookieId)}` });
 }
 
+function renderGoogleAuthAccount(account) {
+  const accountId = String(account._id || account.id);
+  const lastGenerated = account.lastCookieGeneratedAt ? new Date(account.lastCookieGeneratedAt).toLocaleString() : "-";
+  const cookieDownloadUrl = `/api/google-auth/${encodeURIComponent(accountId)}/cookies/download`;
+  const secretFlags = [
+    account.hasPassword ? "şifre var" : "şifre yok",
+    account.hasTwoFaSecret ? "2FA var" : "2FA yok",
+    account.recoveryEmail ? "recovery var" : "recovery yok"
+  ].join(" · ");
+
+  return `
+    <div class="google-auth-row">
+      <div>
+        <div class="fw-semibold">${escapeHtml(account.email)}</div>
+        <div class="task-meta">${escapeHtml(secretFlags)} · son üretim ${escapeHtml(lastGenerated)}</div>
+        ${account.proxyUrl ? `<div class="task-meta google-auth-file-path">proxy: ${escapeHtml(account.proxyUrl)}</div>` : ""}
+        ${account.lastCookiePoolId ? `<div class="task-meta">cookie: ${escapeHtml(account.lastCookiePoolId)}</div>` : ""}
+        ${account.lastCookieFileName ? `<div class="task-meta">dosya: ${escapeHtml(account.lastCookieFileName)}</div>` : ""}
+        ${account.lastCookieFilePath ? `<div class="task-meta google-auth-file-path">dosya yolu: ${escapeHtml(account.lastCookieFilePath)}</div>` : ""}
+        ${account.lastError ? `<div class="task-meta text-danger">${escapeHtml(account.lastError)}</div>` : ""}
+        ${account.notes ? `<div class="task-meta">${escapeHtml(account.notes)}</div>` : ""}
+      </div>
+      <div>${statusBadge(account.status || "active")}</div>
+      <div class="google-auth-actions">
+        <button class="btn btn-outline-primary btn-sm" type="button" data-google-auth-generate="${escapeHtml(accountId)}">Çerez üret</button>
+        ${account.lastCookiePoolId ? `<a class="btn btn-outline-success btn-sm" href="${escapeHtml(cookieDownloadUrl)}">Dosya indir</a>` : ""}
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-google-auth-edit="${escapeHtml(accountId)}">Düzenle</button>
+        <button class="btn btn-outline-danger btn-sm" type="button" data-google-auth-delete="${escapeHtml(accountId)}">Sil</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderGoogleAuthAccounts() {
+  $("#googleAuthAccounts").html(
+    allGoogleAuthAccounts.length
+      ? allGoogleAuthAccounts.map(renderGoogleAuthAccount).join("")
+      : '<div class="empty-state">Google auth hesabı yok.</div>'
+  );
+}
+
+async function loadGoogleAuthAccounts() {
+  allGoogleAuthAccounts = await $.getJSON("/api/google-auth");
+  renderGoogleAuthAccounts();
+}
+
+function resetGoogleAuthForm() {
+  $("#googleAuthAccountId").val("");
+  $("#googleAuthEmail").val("");
+  $("#googleAuthPassword").val("").prop("required", true);
+  $("#googleAuthTwoFaSecret").val("");
+  $("#googleAuthAccountProxyUrl").val("");
+  $("#googleAuthRecoveryEmail").val("");
+  $("#googleAuthRecoveryPassword").val("");
+  $("#googleAuthPhone").val("");
+  $("#googleAuthNotes").val("");
+  $("#googleAuthStatus").val("active");
+  $("#googleAuthSaveBtn").text("Hesap kaydet");
+  $("#googleAuthCancelEditBtn").addClass("d-none");
+}
+
+function readGoogleAuthPayload() {
+  const accountId = cleanOptionalText($("#googleAuthAccountId").val());
+  const payload = {
+    email: cleanOptionalText($("#googleAuthEmail").val()),
+    recoveryEmail: cleanOptionalText($("#googleAuthRecoveryEmail").val()),
+    proxyUrl: cleanOptionalText($("#googleAuthAccountProxyUrl").val()),
+    phone: cleanOptionalText($("#googleAuthPhone").val()),
+    notes: cleanOptionalText($("#googleAuthNotes").val()),
+    status: $("#googleAuthStatus").val()
+  };
+
+  const password = cleanOptionalText($("#googleAuthPassword").val());
+  const recoveryPassword = cleanOptionalText($("#googleAuthRecoveryPassword").val());
+  const twoFaSecret = cleanOptionalText($("#googleAuthTwoFaSecret").val());
+
+  if (!accountId || password) payload.password = password;
+  if (!accountId || recoveryPassword) payload.recoveryPassword = recoveryPassword;
+  if (!accountId || twoFaSecret) payload.twoFaSecret = twoFaSecret;
+
+  return payload;
+}
+
+function editGoogleAuthAccount(accountId) {
+  const account = allGoogleAuthAccounts.find((item) => String(item._id || item.id) === String(accountId));
+  if (!account) return;
+
+  $("#googleAuthAccountId").val(accountId);
+  $("#googleAuthEmail").val(account.email || "");
+  $("#googleAuthPassword").val(account.password || "").prop("required", false);
+  $("#googleAuthTwoFaSecret").val(account.twoFaSecret || "");
+  $("#googleAuthAccountProxyUrl").val(account.proxyUrl || "");
+  $("#googleAuthRecoveryEmail").val(account.recoveryEmail || "");
+  $("#googleAuthRecoveryPassword").val(account.recoveryPassword || "");
+  $("#googleAuthPhone").val(account.phone || "");
+  $("#googleAuthNotes").val(account.notes || "");
+  $("#googleAuthStatus").val(account.status || "active");
+  $("#googleAuthSaveBtn").text("Hesap güncelle");
+  $("#googleAuthCancelEditBtn").removeClass("d-none");
+}
+
+async function saveGoogleAuthAccount() {
+  const accountId = cleanOptionalText($("#googleAuthAccountId").val());
+  const payload = readGoogleAuthPayload();
+  const request = {
+    method: accountId ? "PUT" : "POST",
+    url: accountId ? `/api/google-auth/${encodeURIComponent(accountId)}` : "/api/google-auth",
+    contentType: "application/json",
+    data: JSON.stringify(payload)
+  };
+  await $.ajax(request);
+}
+
+async function deleteGoogleAuthAccount(accountId) {
+  if (!confirm("Google auth hesabı silinsin mi?")) return;
+  await $.ajax({ method: "DELETE", url: `/api/google-auth/${encodeURIComponent(accountId)}` });
+}
+
+async function deleteAllGoogleAuthAccounts() {
+  if (!allGoogleAuthAccounts.length) {
+    alert("Silinecek Google auth hesabı yok.");
+    return;
+  }
+  if (!confirm(`${allGoogleAuthAccounts.length} Google auth hesabı silinsin mi?`)) return;
+
+  await $.ajax({ method: "DELETE", url: "/api/google-auth" });
+  allGoogleAuthAccounts = [];
+  renderGoogleAuthAccounts();
+}
+
+async function generateGoogleAuthAccountsSequentially(accounts) {
+  const accountIds = accounts.map((account) => String(account._id || account.id)).filter(Boolean);
+  let successCount = 0;
+  let failedCount = 0;
+
+  for (const accountId of accountIds) {
+    try {
+      await $.ajax({
+        method: "POST",
+        url: `/api/google-auth/${encodeURIComponent(accountId)}/cookies`,
+        contentType: "application/json",
+        data: JSON.stringify({
+          headless: $("#googleAuthHeadless").is(":checked"),
+          deviceMode: $("#googleAuthDeviceMode").val(),
+          proxyUrl: cleanOptionalText($("#googleAuthProxyUrl").val()),
+          notes: `Google auth otomatik import üretimi · ${new Date().toLocaleString()}`
+        })
+      });
+      successCount += 1;
+    } catch (error) {
+      failedCount += 1;
+    } finally {
+      await loadGoogleAuthAccounts();
+      await loadCookies();
+    }
+  }
+
+  return { successCount, failedCount };
+}
+
+async function importGoogleAuthAccounts() {
+  const file = ($("#googleAuthImportFile")[0].files || [])[0];
+  if (!file) {
+    alert("CSV/TSV dosyası seç.");
+    return;
+  }
+
+  const result = await $.ajax({
+    method: "POST",
+    url: "/api/google-auth/import",
+    contentType: "application/json",
+    data: JSON.stringify({
+      content: isSpreadsheetFile(file) ? await readFileAsBase64(file) : await readTextFile(file),
+      fileName: file.name || "",
+      contentType: file.type || "",
+      proxyUrl: cleanOptionalText($("#googleAuthImportProxyUrl").val()),
+      proxyList: cleanOptionalText($("#googleAuthImportProxyList").val()),
+      autoGenerate: $("#googleAuthImportAutoGenerate").is(":checked")
+    })
+  });
+
+  await loadGoogleAuthAccounts();
+  if (!$("#googleAuthImportAutoGenerate").is(":checked")) {
+    alert(`${result.importedCount || 0} Google hesabı import edildi.`);
+    return;
+  }
+
+  const generated = await generateGoogleAuthAccountsSequentially(result.accounts || []);
+  alert(`${result.importedCount || 0} hesap import edildi. Üretim: ${generated.successCount} başarılı, ${generated.failedCount} hatalı.`);
+}
+
+async function generateGoogleAuthCookies(accountId, button) {
+  const proxyUrl = cleanOptionalText($("#googleAuthProxyUrl").val());
+  const $button = $(button);
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Üretiliyor...");
+
+  try {
+    const result = await $.ajax({
+      method: "POST",
+      url: `/api/google-auth/${encodeURIComponent(accountId)}/cookies`,
+      contentType: "application/json",
+      data: JSON.stringify({
+        headless: $("#googleAuthHeadless").is(":checked"),
+        deviceMode: $("#googleAuthDeviceMode").val(),
+        proxyUrl,
+        notes: `Google auth UI üretimi · ${new Date().toLocaleString()}`
+      })
+    });
+    await loadGoogleAuthAccounts();
+    await loadCookies();
+    alert(`${result.cookieCount || 0} Google cookie havuza ve dosyaya kaydedildi.`);
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
 async function checkHealth() {
   try {
     await $.getJSON("/api/health");
@@ -756,6 +1009,64 @@ $("#cookieImportForm").on("submit", async function (event) {
     $button.prop("disabled", false).text("Havuza yükle");
   }
 });
+$("#googleAuthAccountForm").on("submit", async function (event) {
+  event.preventDefault();
+  const $button = $("#googleAuthSaveBtn");
+  $button.prop("disabled", true).text(cleanOptionalText($("#googleAuthAccountId").val()) ? "Güncelleniyor..." : "Kaydediliyor...");
+
+  try {
+    await saveGoogleAuthAccount();
+    resetGoogleAuthForm();
+    await loadGoogleAuthAccounts();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Google auth hesabı kaydedilemedi"));
+  } finally {
+    $button.prop("disabled", false).text(cleanOptionalText($("#googleAuthAccountId").val()) ? "Hesap güncelle" : "Hesap kaydet");
+  }
+});
+$("#googleAuthImportForm").on("submit", async function (event) {
+  event.preventDefault();
+  const $button = $("#googleAuthImportBtn");
+  $button.prop("disabled", true).text($("#googleAuthImportAutoGenerate").is(":checked") ? "Import + üretim..." : "Import...");
+
+  try {
+    await importGoogleAuthAccounts();
+    $("#googleAuthImportFile").val("");
+    $("#googleAuthImportFileName").text("Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV");
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Google auth import yapılamadı"));
+  } finally {
+    $button.prop("disabled", false).text("Dosyadan import");
+  }
+});
+$("#googleAuthCancelEditBtn").on("click", resetGoogleAuthForm);
+$("#googleAuthDeleteAllBtn").on("click", function () {
+  const $button = $(this);
+  $button.prop("disabled", true).text("Siliniyor...");
+  deleteAllGoogleAuthAccounts().then(loadGoogleAuthAccounts).catch((error) => {
+    alert(extractAjaxErrorMessage(error, "Google auth hesapları silinemedi"));
+  }).finally(() => {
+    $button.prop("disabled", false).text("Tümünü sil");
+  });
+});
+$("#googleAuthAccounts").on("click", "[data-google-auth-edit]", function () {
+  editGoogleAuthAccount($(this).data("google-auth-edit"));
+});
+$("#googleAuthAccounts").on("click", "[data-google-auth-delete]", function () {
+  deleteGoogleAuthAccount($(this).data("google-auth-delete")).then(loadGoogleAuthAccounts).catch((error) => {
+    alert(extractAjaxErrorMessage(error, "Google auth hesabı silinemedi"));
+  });
+});
+$("#googleAuthAccounts").on("click", "[data-google-auth-generate]", function () {
+  generateGoogleAuthCookies($(this).data("google-auth-generate"), this).catch((error) => {
+    alert(extractAjaxErrorMessage(error, "Google çerezi üretilemedi"));
+    loadGoogleAuthAccounts();
+  });
+});
+$("#googleAuthImportFile").on("change", function () {
+  const file = (this.files || [])[0];
+  $("#googleAuthImportFileName").text(file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV");
+});
 $("#cookiePoolFiles").on("change", function () {
   const files = Array.from(this.files || []);
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -813,7 +1124,7 @@ $(document).on("change", "[data-cookie-file]", function () {
 });
 
 function setStreamState(online) {
-  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState")
+  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState, #googleAuthLiveState")
     .toggleClass("is-offline", !online)
     .text(online ? "live" : "reconnecting");
 }
@@ -825,6 +1136,7 @@ events.addEventListener("heartbeat", () => setStreamState(true));
 events.addEventListener("error", () => setStreamState(false));
 events.addEventListener("task.updated", scheduleLoadTasks);
 events.addEventListener("cookie.updated", loadCookies);
+events.addEventListener("googleAuth.updated", loadGoogleAuthAccounts);
 events.addEventListener("task.deleted", (event) => {
   const payload = JSON.parse(event.data);
   allTasks = allTasks.filter((task) => String(task._id) !== String(payload.taskId));
@@ -853,5 +1165,6 @@ checkHealth();
 loadBrowserCapacity();
 loadTasks();
 loadCookies();
+loadGoogleAuthAccounts();
 loadLogs();
 loadErrors();

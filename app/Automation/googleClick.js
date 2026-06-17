@@ -183,14 +183,14 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMo
     }
     await acceptConsentIfPresent(page);
 
-    const { matchedUrl, resultPage, resultRank, blockedByGoogle } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
+    const { matchedUrl, resultPage, resultRank, blockedByGoogle, noResults, error } = await findResultAcrossPages(page, target, googleMaxResultPages, onEvent);
 
     if (blockedByGoogle) {
       return { status: "blocked_by_google", matchedUrl: null, resultPage, googleBlocked: true };
     }
 
     if (!matchedUrl || !targetMatchesUrl(matchedUrl, target)) {
-      return { status: "not_found", matchedUrl: null, resultPage };
+      return { status: "not_found", matchedUrl: null, resultPage, noResults: Boolean(noResults), error };
     }
 
     await onEvent("target_navigation_started", { matchedUrl, resultPage, resultRank });

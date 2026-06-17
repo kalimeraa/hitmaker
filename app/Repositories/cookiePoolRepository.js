@@ -18,6 +18,10 @@ class CookiePoolRepository {
     return CookiePoolItem.insertMany(items);
   }
 
+  create(item) {
+    return CookiePoolItem.create(item);
+  }
+
   updateDetails(id, payload) {
     return CookiePoolItem.findByIdAndUpdate(id, {
       $set: {

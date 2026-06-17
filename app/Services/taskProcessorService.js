@@ -31,8 +31,8 @@ class TaskProcessorService {
     const startedTask = await this.repository.findById(task._id);
     if (!startedTask) return { taskId: String(task._id), status: "deleted" };
 
-    const taskConcurrency = Math.max(1, Number(startedTask.maxConcurrentBrowsers || 2));
-    const concurrency = Math.min(taskConcurrency, Math.max(2, Number(maxParallelBrowsers) || 2));
+    const taskConcurrency = Math.max(1, Number(startedTask.maxConcurrentBrowsers) || 1);
+    const concurrency = Math.min(taskConcurrency, Math.max(1, Number(maxParallelBrowsers) || 1));
     logger.info("task_processing_concurrency_resolved", {
       taskId: String(startedTask._id),
       requestedConcurrency: taskConcurrency,
