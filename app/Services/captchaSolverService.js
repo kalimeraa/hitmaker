@@ -57,41 +57,47 @@ async function solveRecaptcha({
     return { success: false, error: "recaptcha_pageurl_missing" };
   }
 
-  const request = {
-    pageurl,
-    googlekey: sitekey,
-    enterprise: enterprise ? 1 : 0,
-    invisible: invisible ? 1 : 0
+  // Google signin reCAPTCHA = Enterprise; doğru çözüm için data-s `enterprisePayload.s` içinde
+  // gönderilmeli (legacy `datas` param'ı enterprise'da yeterli değil). Bu yüzden yeni createTask
+  // API'sini kullanıyoruz: RecaptchaV2EnterpriseTask + enterprisePayload + apiDomain + proxy parçaları.
+  // Token IP'ye bağlı olduğundan proxy'yi de veriyoruz ki worker bizim exit IP'mizden çözsün.
+  const solverProxy = parseSolverProxy(proxy, proxytype);
+  const task = {
+    type: enterprise
+      ? (solverProxy ? "RecaptchaV2EnterpriseTask" : "RecaptchaV2EnterpriseTaskProxyless")
+      : (solverProxy ? "RecaptchaV2Task" : "RecaptchaV2TaskProxyless"),
+    websiteURL: pageurl,
+    websiteKey: sitekey,
+    isInvisible: Boolean(invisible),
+    apiDomain: "google.com"
   };
-  if (datas) request.datas = datas;
-  if (action) request.action = action;
-  // Google's signin reCAPTCHA token is bound to the solving IP. If 2captcha solves from its own
-  // datacenter IP while we submit from our mobile proxy, Google rejects the token. So we hand 2captcha
-  // OUR proxy (it solves through the same exit IP) + matching userAgent/cookies for IP & fingerprint
-  // alignment. See https://2captcha.com/blog/bypassing-recaptcha-v2-on-google-search
-  if (proxy) {
-    request.proxy = proxy;
-    request.proxytype = (proxytype || "HTTP").toUpperCase();
+  if (enterprise) {
+    const payload = {};
+    if (datas) payload.s = datas;
+    if (action) payload.action = action;
+    if (Object.keys(payload).length) task.enterprisePayload = payload;
+  } else if (datas) {
+    task.recaptchaDataSValue = datas;
   }
-  if (userAgent) request.userAgent = userAgent;
-  if (cookies) request.cookies = cookies;
+  if (userAgent) task.userAgent = userAgent;
+  if (cookies) task.cookies = cookies;
+  if (solverProxy) Object.assign(task, solverProxy);
 
   const deadline = Date.now() + timeoutMs;
   let lastError = "captcha_solve_failed";
 
-  // 2captrcha'ya giden ağ geçici koparsa (DNS/bağlantı) anında pes etme; süre dolana dek tekrar dene.
+  // 2captcha'ya giden ağ geçici koparsa (DNS/bağlantı) anında pes etme; süre dolana dek tekrar dene.
   while (Date.now() < deadline) {
     try {
-      const remaining = deadline - Date.now();
-      const answer = await Promise.race([
-        solver.recaptcha(request),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("captcha_solve_timeout")), remaining))
-      ]);
-      const token = answer && answer.data;
-      if (!token) {
-        return { success: false, error: "captcha_token_empty" };
+      const result = await runCaptchaTask(apiKey, task, deadline);
+      if (result.success) {
+        return result;
       }
-      return { success: true, token, captchaId: answer.id ? String(answer.id) : "" };
+      lastError = result.error || "captcha_solve_failed";
+      if (!isTransientNetworkError(lastError) || Date.now() >= deadline) {
+        return result;
+      }
+      await sleep(5000);
     } catch (error) {
       lastError = error.message || "captcha_solve_failed";
       if (!isTransientNetworkError(lastError) || Date.now() >= deadline) {
@@ -102,6 +108,73 @@ async function solveRecaptcha({
   }
 
   return { success: false, error: lastError };
+}
+
+// "login:password@host:port" / "host:port" -> 2captcha createTask proxy alanları.
+function parseSolverProxy(proxy, proxytype) {
+  const text = String(proxy || "").trim();
+  if (!text) return null;
+  let creds = "";
+  let hostport = text;
+  if (text.includes("@")) {
+    const at = text.lastIndexOf("@");
+    creds = text.slice(0, at);
+    hostport = text.slice(at + 1);
+  }
+  const colon = hostport.lastIndexOf(":");
+  if (colon === -1) return null;
+  const address = hostport.slice(0, colon);
+  const port = hostport.slice(colon + 1);
+  if (!address || !port) return null;
+  const [login, password] = creds ? creds.split(":") : ["", ""];
+  const result = {
+    proxyType: String(proxytype || "http").toLowerCase(),
+    proxyAddress: address,
+    proxyPort: Number(port)
+  };
+  if (login) result.proxyLogin = login;
+  if (password) result.proxyPassword = password;
+  return result;
+}
+
+const CREATE_TASK_URL = "https://api.2captcha.com/createTask";
+const GET_TASK_RESULT_URL = "https://api.2captcha.com/getTaskResult";
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  return response.json();
+}
+
+// createTask -> getTaskResult polling. Returns { success, token, captchaId } | { success:false, error }.
+async function runCaptchaTask(apiKey, task, deadline) {
+  const created = await postJson(CREATE_TASK_URL, { clientKey: apiKey, task });
+  if (created.errorId) {
+    return { success: false, error: created.errorCode || created.errorDescription || "create_task_failed" };
+  }
+  const taskId = created.taskId;
+  if (!taskId) {
+    return { success: false, error: "create_task_no_id" };
+  }
+
+  while (Date.now() < deadline) {
+    await sleep(POLLING_INTERVAL_MS);
+    const result = await postJson(GET_TASK_RESULT_URL, { clientKey: apiKey, taskId });
+    if (result.errorId) {
+      return { success: false, error: result.errorCode || result.errorDescription || "get_task_result_failed" };
+    }
+    if (result.status === "ready") {
+      const token = result.solution && (result.solution.gRecaptchaResponse || result.solution.token);
+      if (!token) {
+        return { success: false, error: "captcha_token_empty" };
+      }
+      return { success: true, token, captchaId: String(taskId) };
+    }
+  }
+  return { success: false, error: "captcha_solve_timeout" };
 }
 
 function sleep(ms) {

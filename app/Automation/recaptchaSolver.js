@@ -292,14 +292,14 @@ function proxyUrlToSolverProxy(proxyUrl) {
   }
 }
 
-// 2captcha wants cookies as a `name:value;name2:value2` string for the worker session.
+// 2captcha createTask API wants cookies as a `name=value; name2=value2` string for the worker session.
 async function collectCookieString(page) {
   try {
     const cookies = await page.context().cookies();
     return cookies
       .filter((cookie) => cookie && cookie.name)
-      .map((cookie) => `${cookie.name}:${cookie.value}`)
-      .join(";");
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
   } catch (error) {
     return "";
   }

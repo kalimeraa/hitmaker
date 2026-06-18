@@ -920,6 +920,7 @@ async function generateGoogleAuthCookies(accountId, button) {
         proxyUrl,
         captchaApiKey: cleanOptionalText($("#googleAuthCaptchaApiKey").val()),
         proxyResetUrl: cleanOptionalText($("#googleAuthProxyResetUrl").val()),
+        maxAttempts: Number($("#googleAuthMaxAttempts").val()) || 3,
         notes: `Google auth UI üretimi · ${new Date().toLocaleString()}`
       })
     });

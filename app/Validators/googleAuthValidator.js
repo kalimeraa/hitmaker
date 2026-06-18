@@ -263,6 +263,7 @@ function validateCookieGenerationPayload(body = {}) {
     captchaApiKey: normalizeOptionalText(body.captchaApiKey).slice(0, 120),
     proxyProvider: normalizeOptionalText(body.proxyProvider).toLowerCase().slice(0, 60),
     proxyResetUrl: normalizeOptionalText(body.proxyResetUrl).slice(0, 500),
+    maxAttempts: Math.min(5, Math.max(1, Number(body.maxAttempts) || 3)),
     notes: normalizeOptionalText(body.notes).slice(0, 500)
   };
 }

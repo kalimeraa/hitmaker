@@ -6,6 +6,18 @@ const realtimeEventService = require("./realtimeEventService");
 const { logger } = require("./logService");
 const { generateGoogleAuthCookies } = require("../Automation/googleAuthLogin");
 const { detectProxyProvider } = require("./proxyProviderService");
+
+// Bir login başarısızlığını "retry" (taze IP ile tekrar dene) veya "terminal" (denemeyi bırak) olarak
+// sınıflandırır. Captcha/güvensiz-tarayıcı IP itibarının semptomu → taze IP'de kaybolabilir.
+// Telefon doğrulama hesabın yandığını, 2FA hatası secret/hesap sorununu gösterir → IP rotasyonu çözmez.
+function classifyLoginFailure(result = {}) {
+  const reason = result.failureReason || "";
+  const error = String(result.error || "");
+  if (reason === "phone_verification" || reason === "2fa_challenge") return "terminal";
+  if (reason === "recaptcha_challenge" || reason === "unsafe_browser") return "retry";
+  if (/TUNNEL_CONNECTION_FAILED|ECONNRESET|ETIMEDOUT|net::ERR|timeout|Target closed/i.test(error)) return "retry";
+  return "terminal";
+}
 const { validateAccountPayload, validateCookieGenerationPayload, validateAccountImportPayload } = require("../Validators/googleAuthValidator");
 const { HttpError } = require("../Utils/httpError");
 
@@ -324,49 +336,57 @@ class GoogleAuthService {
       hasProxy: Boolean(options.proxyUrl)
     });
 
-    // Mobil proxy IP'si login ortasında dönerse Google maksimum bot sinyali alır (captcha/biometrik
-    // challenge). Proxy host'undan provider'ı (ör. buymobileproxy) otomatik algıla ve reset link
-    // verildiyse login'den ÖNCE tek seferlik taze IP al; tarayıcı o sabit IP üzerinde açılır.
     const effectiveProxyUrl = options.proxyUrl || account.proxyUrl || "";
     const proxyProvider = detectProxyProvider(effectiveProxyUrl);
-    if (proxyProvider && proxyProvider.manualReset && options.proxyResetUrl) {
-      logger.info("google_auth_proxy_reset_started", {
-        accountId: String(account._id),
-        email: account.email,
-        provider: proxyProvider.name
-      });
-      const reset = await proxyProvider.resetIp({ resetUrl: options.proxyResetUrl });
-      logger.info(reset.success ? "google_auth_proxy_reset_completed" : "google_auth_proxy_reset_failed", {
-        accountId: String(account._id),
-        email: account.email,
-        provider: proxyProvider.name,
-        status: reset.status,
-        error: reset.error,
-        response: reset.response
-      });
-    }
+    const canRotate = Boolean(proxyProvider && proxyProvider.manualReset && options.proxyResetUrl);
+    const onEvent = async (event, meta = {}) => {
+      logger.info(event, { accountId: String(account._id), email: account.email, ...meta });
+    };
 
-    const result = await this.authAutomation({
-      email: account.email,
-      password: account.password,
-      twoFaSecret: account.twoFaSecret,
-      headless: options.headless,
-      deviceMode: options.deviceMode,
-      proxyUrl: options.proxyUrl || account.proxyUrl || "",
-      captchaApiKey: options.captchaApiKey || "",
-      onEvent: async (event, meta = {}) => {
-        logger.info(event, {
-          accountId: String(account._id),
-          email: account.email,
-          ...meta
+    // IP-rotasyon-retry algoritması: captcha/güvensiz-tarayıcı bir IP'nin yanmasının semptomu —
+    // 2captcha signin token'ını Google reddediyor, o yüzden aynı IP'de ısrar etmek anlamsız. Her
+    // denemede TAZE IP al, baştan dene. Telefon doğrulama (yanmış) veya 2FA hatası terminal: retry yok.
+    const maxAttempts = canRotate ? options.maxAttempts : 1;
+    let result = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await onEvent("google_auth_attempt_started", { attempt, maxAttempts, canRotate });
+
+      // Her denemeden önce taze mobil IP (rotasyon açıksa).
+      if (canRotate) {
+        await onEvent("google_auth_proxy_reset_started", { provider: proxyProvider.name, attempt });
+        const reset = await proxyProvider.resetIp({ resetUrl: options.proxyResetUrl });
+        await onEvent(reset.success ? "google_auth_proxy_reset_completed" : "google_auth_proxy_reset_failed", {
+          provider: proxyProvider.name, attempt, status: reset.status, error: reset.error, response: reset.response
         });
       }
-    });
 
-    if (!result.success) {
-      await this.accountRepository.markLoginFailed(id, result.error || "Google auth failed", result.url || "", result.failureReason || "");
-      await realtimeEventService.publish("googleAuth.updated", { action: "failed", accountId: String(account._id), challenge: result.failureReason || "" });
-      throw new HttpError(400, result.error || "Google auth failed");
+      result = await this.authAutomation({
+        email: account.email,
+        password: account.password,
+        twoFaSecret: account.twoFaSecret,
+        headless: options.headless,
+        deviceMode: options.deviceMode,
+        proxyUrl: effectiveProxyUrl,
+        captchaApiKey: options.captchaApiKey || "",
+        onEvent
+      });
+
+      if (result.success) break;
+
+      const decision = classifyLoginFailure(result);
+      await onEvent("google_auth_attempt_failed", {
+        attempt, maxAttempts, failureReason: result.failureReason || "", error: result.error || "", decision
+      });
+      // terminal (yanmış / 2FA) → retry etme; retry → sıradaki taze IP; son denemeyse çık.
+      if (decision === "terminal" || attempt >= maxAttempts) break;
+    }
+
+    if (!result || !result.success) {
+      const failure = result || { error: "google_auth_failed" };
+      await this.accountRepository.markLoginFailed(id, failure.error || "Google auth failed", failure.url || "", failure.failureReason || "");
+      await realtimeEventService.publish("googleAuth.updated", { action: "failed", accountId: String(account._id), challenge: failure.failureReason || "" });
+      throw new HttpError(400, failure.error || "Google auth failed");
     }
 
     const cookie = await this.cookieRepository.create({

@@ -44,6 +44,11 @@
         <option value="mobile">Mobil</option>
       </select>
     </div>
+    <div>
+      <label class="form-label" for="googleAuthMaxAttempts">Deneme (IP rotasyon)</label>
+      <input class="form-control" id="googleAuthMaxAttempts" type="number" min="1" max="5" value="3">
+      <div class="form-text">Captcha çıkarsa taze IP ile kaç kez tekrar denensin (reset link varsa).</div>
+    </div>
     <div class="form-check form-switch google-auth-headless">
       <input class="form-check-input" type="checkbox" role="switch" id="googleAuthHeadless" <%= headlessDefault ? "checked" : "" %>>
       <label class="form-check-label" for="googleAuthHeadless">Headless</label>
