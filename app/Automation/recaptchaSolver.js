@@ -266,7 +266,46 @@ async function waitForRecaptchaParams(page, onEvent = async () => {}, { timeoutM
   return last;
 }
 
-async function solveRecaptchaOnPage(page, { apiKey, onEvent = async () => {}, debug = process.env.CAPTCHA_DEBUG === "1" } = {}) {
+// Converts our proxy URL (http://user:pass@host:port / socks5://...) into the { proxy, proxytype }
+// pair 2captcha expects (proxy = "login:password@host:port", proxytype = HTTP/HTTPS/SOCKS4/SOCKS5).
+// We MUST give 2captcha the same upstream proxy the browser exits through so the solved token's IP
+// matches ours — otherwise Google rejects it server-side.
+function proxyUrlToSolverProxy(proxyUrl) {
+  const text = String(proxyUrl || "").trim();
+  if (!text) return null;
+  try {
+    const parsed = new URL(text);
+    const scheme = parsed.protocol.replace(":", "").toLowerCase();
+    const proxytype = scheme.startsWith("socks5") ? "SOCKS5"
+      : scheme.startsWith("socks4") ? "SOCKS4"
+      : scheme === "https" ? "HTTPS"
+      : "HTTP";
+    const host = parsed.hostname;
+    const port = parsed.port;
+    if (!host || !port) return null;
+    const login = decodeURIComponent(parsed.username || "");
+    const password = decodeURIComponent(parsed.password || "");
+    const auth = login ? `${login}${password ? `:${password}` : ""}@` : "";
+    return { proxy: `${auth}${host}:${port}`, proxytype };
+  } catch (error) {
+    return null;
+  }
+}
+
+// 2captcha wants cookies as a `name:value;name2:value2` string for the worker session.
+async function collectCookieString(page) {
+  try {
+    const cookies = await page.context().cookies();
+    return cookies
+      .filter((cookie) => cookie && cookie.name)
+      .map((cookie) => `${cookie.name}:${cookie.value}`)
+      .join(";");
+  } catch (error) {
+    return "";
+  }
+}
+
+async function solveRecaptchaOnPage(page, { apiKey, onEvent = async () => {}, debug = process.env.CAPTCHA_DEBUG === "1", proxyUrl = "" } = {}) {
   if (!hasApiKey(apiKey)) {
     return { success: false, error: "captcha_api_key_missing", skipped: true };
   }
@@ -277,11 +316,21 @@ async function solveRecaptchaOnPage(page, { apiKey, onEvent = async () => {}, de
     return { success: false, error: "recaptcha_sitekey_not_found" };
   }
 
+  // Hand 2captcha our proxy + browser fingerprint so the token is solved from the same IP we submit
+  // from (the root cause of Google rejecting otherwise-valid tokens on its signin page).
+  const solverProxy = proxyUrlToSolverProxy(proxyUrl);
+  const userAgent = await page.evaluate(() => navigator.userAgent).catch(() => "");
+  const cookies = await collectCookieString(page);
+
   await onEvent("google_auth_captcha_solve_started", {
     sitekey: params.sitekey,
     enterprise: Boolean(params.enterprise),
     invisible: Boolean(params.invisible),
-    provider: "2captcha"
+    provider: "2captcha",
+    viaProxy: Boolean(solverProxy),
+    proxytype: solverProxy ? solverProxy.proxytype : "",
+    hasUserAgent: Boolean(userAgent),
+    hasCookies: Boolean(cookies)
   });
 
   if (debug) {
@@ -295,7 +344,11 @@ async function solveRecaptchaOnPage(page, { apiKey, onEvent = async () => {}, de
     sitekey: params.sitekey,
     enterprise: params.enterprise,
     invisible: params.invisible,
-    datas: params.datas || ""
+    datas: params.datas || "",
+    proxy: solverProxy ? solverProxy.proxy : "",
+    proxytype: solverProxy ? solverProxy.proxytype : "",
+    userAgent,
+    cookies
   });
 
   if (!solve.success) {

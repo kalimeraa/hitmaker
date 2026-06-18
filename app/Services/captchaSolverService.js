@@ -40,6 +40,10 @@ async function solveRecaptcha({
   invisible = false,
   datas = "",
   action = "",
+  proxy = "",
+  proxytype = "",
+  userAgent = "",
+  cookies = "",
   timeoutMs = DEFAULT_SOLVE_TIMEOUT_MS
 } = {}) {
   const solver = getSolver(apiKey);
@@ -61,6 +65,16 @@ async function solveRecaptcha({
   };
   if (datas) request.datas = datas;
   if (action) request.action = action;
+  // Google's signin reCAPTCHA token is bound to the solving IP. If 2captcha solves from its own
+  // datacenter IP while we submit from our mobile proxy, Google rejects the token. So we hand 2captcha
+  // OUR proxy (it solves through the same exit IP) + matching userAgent/cookies for IP & fingerprint
+  // alignment. See https://2captcha.com/blog/bypassing-recaptcha-v2-on-google-search
+  if (proxy) {
+    request.proxy = proxy;
+    request.proxytype = (proxytype || "HTTP").toUpperCase();
+  }
+  if (userAgent) request.userAgent = userAgent;
+  if (cookies) request.cookies = cookies;
 
   const deadline = Date.now() + timeoutMs;
   let lastError = "captcha_solve_failed";

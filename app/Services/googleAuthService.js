@@ -5,6 +5,7 @@ const cookiePoolRepository = require("../Repositories/cookiePoolRepository");
 const realtimeEventService = require("./realtimeEventService");
 const { logger } = require("./logService");
 const { generateGoogleAuthCookies } = require("../Automation/googleAuthLogin");
+const { detectProxyProvider } = require("./proxyProviderService");
 const { validateAccountPayload, validateCookieGenerationPayload, validateAccountImportPayload } = require("../Validators/googleAuthValidator");
 const { HttpError } = require("../Utils/httpError");
 
@@ -322,6 +323,28 @@ class GoogleAuthService {
       deviceMode: options.deviceMode,
       hasProxy: Boolean(options.proxyUrl)
     });
+
+    // Mobil proxy IP'si login ortasında dönerse Google maksimum bot sinyali alır (captcha/biometrik
+    // challenge). Proxy host'undan provider'ı (ör. buymobileproxy) otomatik algıla ve reset link
+    // verildiyse login'den ÖNCE tek seferlik taze IP al; tarayıcı o sabit IP üzerinde açılır.
+    const effectiveProxyUrl = options.proxyUrl || account.proxyUrl || "";
+    const proxyProvider = detectProxyProvider(effectiveProxyUrl);
+    if (proxyProvider && proxyProvider.manualReset && options.proxyResetUrl) {
+      logger.info("google_auth_proxy_reset_started", {
+        accountId: String(account._id),
+        email: account.email,
+        provider: proxyProvider.name
+      });
+      const reset = await proxyProvider.resetIp({ resetUrl: options.proxyResetUrl });
+      logger.info(reset.success ? "google_auth_proxy_reset_completed" : "google_auth_proxy_reset_failed", {
+        accountId: String(account._id),
+        email: account.email,
+        provider: proxyProvider.name,
+        status: reset.status,
+        error: reset.error,
+        response: reset.response
+      });
+    }
 
     const result = await this.authAutomation({
       email: account.email,

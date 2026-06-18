@@ -57,42 +57,7 @@
       </select>
     </div>
 
-    <div>
-      <label for="proxyUrl" class="form-label">Proxy</label>
-      <input class="form-control" id="proxyUrl" placeholder="http://user:pass@host:port veya socks5://user:pass@host:port" data-proxy-url="create">
-      <div class="proxy-builder mt-2" data-proxy-builder="create">
-        <div class="row g-2">
-          <div class="col-5">
-            <label class="form-label small" for="proxyProtocol">Tip</label>
-            <select class="form-select" id="proxyProtocol" data-proxy-field="protocol">
-              <option value="http">HTTP</option>
-              <option value="https">HTTPS</option>
-              <option value="socks5" selected>SOCKS5</option>
-              <option value="socks5h">SOCKS5H</option>
-              <option value="socks4">SOCKS4</option>
-              <option value="socks4a">SOCKS4A</option>
-            </select>
-          </div>
-          <div class="col-7">
-            <label class="form-label small" for="proxyPort">Port</label>
-            <input class="form-control" id="proxyPort" data-proxy-field="port" placeholder="8180">
-          </div>
-          <div class="col-12">
-            <label class="form-label small" for="proxyHost">Host</label>
-            <input class="form-control" id="proxyHost" data-proxy-field="host" placeholder="ankara8.buymobileproxy.com">
-          </div>
-          <div class="col-6">
-            <label class="form-label small" for="proxyUsername">Kullanıcı</label>
-            <input class="form-control" id="proxyUsername" data-proxy-field="username" placeholder="opsiyonel">
-          </div>
-          <div class="col-6">
-            <label class="form-label small" for="proxyPassword">Şifre</label>
-            <input class="form-control" id="proxyPassword" data-proxy-field="password" placeholder="opsiyonel">
-          </div>
-        </div>
-        <div class="proxy-preview mt-2" data-proxy-preview="create">Proxy boş.</div>
-      </div>
-    </div>
+    <%- include("proxyBuilder", { scope: "create", urlId: "proxyUrl", label: "Proxy" }) %>
 
     <div>
       <label for="captchaApiKey" class="form-label">2captcha API anahtarı</label>

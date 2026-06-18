@@ -8,66 +8,11 @@
     </div>
   </div>
 
-  <form id="googleAuthAccountForm" class="google-auth-form" autocomplete="off">
-    <input type="hidden" id="googleAuthAccountId">
+  <form id="googleAuthImportForm" class="google-auth-import" autocomplete="off">
     <div>
-      <label class="form-label" for="googleAuthEmail">Google email</label>
-      <input class="form-control" id="googleAuthEmail" type="email" autocomplete="off" required>
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthPassword">Şifre</label>
-      <input class="form-control" id="googleAuthPassword" type="password" autocomplete="new-password" required>
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthTwoFaSecret">2FA secret</label>
-      <input class="form-control" id="googleAuthTwoFaSecret" autocomplete="off" placeholder="base32">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthAccountProxyUrl">Hesap proxy</label>
-      <input class="form-control" id="googleAuthAccountProxyUrl" autocomplete="off" placeholder="opsiyonel">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthRecoveryEmail">Recovery email</label>
-      <input class="form-control" id="googleAuthRecoveryEmail" type="email" autocomplete="off">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthRecoveryPassword">Recovery şifre</label>
-      <input class="form-control" id="googleAuthRecoveryPassword" type="password" autocomplete="new-password">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthPhone">Telefon</label>
-      <input class="form-control" id="googleAuthPhone" autocomplete="off">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthNotes">Not</label>
-      <input class="form-control" id="googleAuthNotes" autocomplete="off">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthStatus">Durum</label>
-      <select class="form-select" id="googleAuthStatus">
-        <option value="active" selected>active</option>
-        <option value="disabled">disabled</option>
-      </select>
-    </div>
-    <div class="google-auth-form-actions">
-      <button class="btn btn-primary" type="submit" id="googleAuthSaveBtn">Hesap kaydet</button>
-      <button class="btn btn-outline-secondary d-none" type="button" id="googleAuthCancelEditBtn">Vazgeç</button>
-    </div>
-  </form>
-
-  <form id="googleAuthImportForm" class="google-auth-import mt-3" autocomplete="off">
-    <div>
-      <label class="form-label" for="googleAuthImportFile">CSV/TSV import</label>
+      <label class="form-label" for="googleAuthImportFile">Hesap import (XLSX/CSV/TSV)</label>
       <input class="form-control" id="googleAuthImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/tab-separated-values,text/plain">
       <div class="form-text" id="googleAuthImportFileName">Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV</div>
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthImportProxyUrl">Tek proxy</label>
-      <input class="form-control" id="googleAuthImportProxyUrl" placeholder="opsiyonel">
-    </div>
-    <div>
-      <label class="form-label" for="googleAuthImportProxyList">Proxy listesi</label>
-      <textarea class="form-control" id="googleAuthImportProxyList" rows="2" placeholder="satır satır opsiyonel"></textarea>
     </div>
     <div class="google-auth-import-actions">
       <div class="form-check form-switch google-auth-headless">
@@ -80,8 +25,13 @@
 
   <div class="google-auth-options mt-3">
     <div>
-      <label class="form-label" for="googleAuthProxyUrl">Çerez üretim proxy</label>
-      <input class="form-control" id="googleAuthProxyUrl" placeholder="opsiyonel">
+      <label class="form-label" for="googleAuthProxyUrl">Proxy</label>
+      <input class="form-control" id="googleAuthProxyUrl" autocomplete="off" placeholder="http://user:pass@host:port veya socks5://...">
+    </div>
+    <div id="googleAuthProxyResetWrap" class="d-none">
+      <label class="form-label" for="googleAuthProxyResetUrl">Proxy reset link <span class="text-muted small">· buymobileproxy</span></label>
+      <input class="form-control" id="googleAuthProxyResetUrl" autocomplete="off" placeholder="https://buymobileproxy.com/api/reset.php?key=...">
+      <div class="form-text">Her hesaptan önce IP yenilenir. Panelde IP yenileme aralığını <strong>Manuel</strong> yapın.</div>
     </div>
     <div>
       <label class="form-label" for="googleAuthCaptchaApiKey">2captcha API anahtarı</label>

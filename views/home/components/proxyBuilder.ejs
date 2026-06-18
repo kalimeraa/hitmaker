@@ -1,0 +1,46 @@
+<%
+  // Tek, tekrar kullanılabilir structured proxy builder. public/app.js içindeki generic
+  // data-proxy-* handler'ları her scope için çalışır; builder alanları daima `data-proxy-url`
+  // input'una senkronlanır, böylece mevcut `#urlId` okumaları bozulmadan çalışır.
+  // Parametreler: scope (benzersiz anahtar), urlId (URL input id'si), label, urlPlaceholder.
+  const proxyLabel = typeof label !== "undefined" ? label : "Proxy";
+  const proxyUrlPlaceholder = typeof urlPlaceholder !== "undefined"
+    ? urlPlaceholder
+    : "http://user:pass@host:port veya socks5://user:pass@host:port";
+%>
+<div class="proxy-field">
+  <label for="<%= urlId %>" class="form-label"><%= proxyLabel %></label>
+  <input class="form-control" id="<%= urlId %>" autocomplete="off" placeholder="<%= proxyUrlPlaceholder %>" data-proxy-url="<%= scope %>">
+  <div class="proxy-builder mt-2" data-proxy-builder="<%= scope %>">
+    <div class="row g-2">
+      <div class="col-5">
+        <label class="form-label small" for="<%= scope %>ProxyProtocol">Tip</label>
+        <select class="form-select" id="<%= scope %>ProxyProtocol" data-proxy-field="protocol">
+          <option value="http">HTTP</option>
+          <option value="https">HTTPS</option>
+          <option value="socks5" selected>SOCKS5</option>
+          <option value="socks5h">SOCKS5H</option>
+          <option value="socks4">SOCKS4</option>
+          <option value="socks4a">SOCKS4A</option>
+        </select>
+      </div>
+      <div class="col-7">
+        <label class="form-label small" for="<%= scope %>ProxyPort">Port</label>
+        <input class="form-control" id="<%= scope %>ProxyPort" data-proxy-field="port" placeholder="8180">
+      </div>
+      <div class="col-12">
+        <label class="form-label small" for="<%= scope %>ProxyHost">Host</label>
+        <input class="form-control" id="<%= scope %>ProxyHost" data-proxy-field="host" placeholder="ankara8.buymobileproxy.com">
+      </div>
+      <div class="col-6">
+        <label class="form-label small" for="<%= scope %>ProxyUsername">Kullanıcı</label>
+        <input class="form-control" id="<%= scope %>ProxyUsername" data-proxy-field="username" placeholder="opsiyonel">
+      </div>
+      <div class="col-6">
+        <label class="form-label small" for="<%= scope %>ProxyPassword">Şifre</label>
+        <input class="form-control" id="<%= scope %>ProxyPassword" data-proxy-field="password" placeholder="opsiyonel">
+      </div>
+    </div>
+    <div class="proxy-preview mt-2" data-proxy-preview="<%= scope %>">Proxy boş.</div>
+  </div>
+</div>

@@ -207,13 +207,14 @@ async function fillAndVerify(locator, expectedValue) {
   }
 }
 
+// Returns { clicked, via } so callers can log whether the Next button was actually pressed.
 async function clickNext(page, preferredSelector = "") {
   if (preferredSelector) {
     const preferred = page.locator(preferredSelector).first();
     if (await preferred.isVisible({ timeout: 5000 }).catch(() => false)) {
       await humanMouseMove(page);
       await preferred.click({ timeout: 10000 });
-      return;
+      return { clicked: true, via: preferredSelector };
     }
   }
 
@@ -229,7 +230,7 @@ async function clickNext(page, preferredSelector = "") {
     if (await button.isVisible({ timeout: 1200 }).catch(() => false)) {
       await humanMouseMove(page);
       await button.click({ timeout: 10000 });
-      return;
+      return { clicked: true, via: selector };
     }
   }
 
@@ -237,10 +238,11 @@ async function clickNext(page, preferredSelector = "") {
   if (await nextButton.isVisible({ timeout: 2000 }).catch(() => false)) {
     await humanMouseMove(page);
     await nextButton.click({ timeout: 10000 });
-    return;
+    return { clicked: true, via: "role=button[name=Next]" };
   }
 
   await page.keyboard.press("Enter");
+  return { clicked: false, via: "enter-fallback" };
 }
 
 async function dismissOptionalPrompts(page) {
@@ -367,22 +369,33 @@ async function handleTwoFactorChallenge(page, twoFaSecret, onEvent = async () =>
   };
 }
 
-async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent) {
+async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent, proxyUrl = "") {
   if (!hasApiKey(captchaApiKey)) {
     return { solved: false, attempted: false };
   }
 
   const urlBeforeSolve = page.url();
-  const solve = await solveRecaptchaOnPage(page, { apiKey: captchaApiKey, onEvent });
+  const solve = await solveRecaptchaOnPage(page, { apiKey: captchaApiKey, onEvent, proxyUrl });
   if (!solve.success) {
     return { solved: false, attempted: !solve.skipped, error: solve.error };
   }
 
-  // Invisible reCAPTCHA auto-submits via callback; checkbox variants need the Next button.
-  await onEvent("google_auth_captcha_submit_started", { email, url: urlBeforeSolve });
+  // Invisible reCAPTCHA auto-submits via callback; checkbox variants need the Next button. Give the
+  // widget a moment to bind the injected token into the form (checkbox turns green) before submit.
+  await randomDelay(1200, 2000);
+  const tokenBound = await page.evaluate(() => {
+    const ta = document.querySelector('textarea#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
+    let getResponseLen = 0;
+    try { getResponseLen = (window.grecaptcha && window.grecaptcha.getResponse && window.grecaptcha.getResponse() || "").length; } catch (e) {}
+    return { textareaLen: ta ? (ta.value || "").length : 0, getResponseLen };
+  }).catch(() => ({ textareaLen: 0, getResponseLen: 0 }));
+  await onEvent("google_auth_captcha_submit_started", { email, url: urlBeforeSolve, tokenBound });
+
+  let nextResult = { clicked: false, via: "skipped" };
   if (await detectRecaptchaChallenge(page)) {
-    await clickNext(page).catch(() => {});
+    nextResult = await clickNext(page).catch((error) => ({ clicked: false, via: "error", error: error.message }));
   }
+  await onEvent("google_auth_captcha_next_clicked", { email, ...nextResult });
   await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
   await randomDelay(1500, 2600);
 
@@ -404,7 +417,7 @@ async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent) {
   return { solved: false, attempted: true, error: "recaptcha_still_present_after_solve" };
 }
 
-async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, timeout = 180000) {
+async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, timeout = 180000, proxyUrl = "") {
   const challenge = await detectRecaptchaChallenge(page);
   if (!challenge) {
     return { success: true, handled: false };
@@ -421,7 +434,7 @@ async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiK
       if (!(await detectRecaptchaChallenge(page))) {
         return { success: true, handled: true };
       }
-      const automated = await attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent);
+      const automated = await attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent, proxyUrl);
       if (automated.solved) {
         return { success: true, handled: true };
       }
@@ -493,6 +506,71 @@ function filterGoogleCookies(cookies) {
     .map(toCookiePayload);
 }
 
+// Google/YouTube EU consent wall blocks warm-up navigation; dismiss it (any frame) if present.
+async function dismissGoogleConsent(page) {
+  const labels = ["Reject all", "Tümünü reddet", "Accept all", "Tümünü kabul et", "I agree", "Kabul ediyorum"];
+  for (const frame of page.frames()) {
+    for (const label of labels) {
+      const button = frame.locator(`button:has-text("${label}"), [role="button"]:has-text("${label}")`).first();
+      if (await button.isVisible({ timeout: 700 }).catch(() => false)) {
+        await button.click({ timeout: 2000 }).catch(() => {});
+        await randomDelay(500, 1200);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+const WARMUP_QUERIES = ["hava durumu", "euro kaç tl", "bugün maçlar", "haberler", "sinema vizyon", "dolar kuru"];
+
+// Warms the proxy IP + browser session BEFORE the signin form. A fresh mobile IP that jumps straight
+// to accounts.google.com with zero prior Google cookies looks bot-like → Google throws the
+// "Verify it's you" reCAPTCHA (which 2captcha cannot reliably solve on Google's own enterprise
+// challenge). Browsing Google + running a benign search + visiting YouTube first (human-paced) earns
+// NID/CONSENT cookies and gives the IP legitimate traffic, dropping the signin risk score so the
+// captcha usually never appears. Best-effort: never throws, never blocks login on failure.
+// Disable with GAUTH_WARMUP=0.
+async function warmUpSession(page, onEvent = async () => {}) {
+  const steps = [];
+  try {
+    await onEvent("google_auth_warmup_started", {});
+
+    await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
+    await randomDelay(1200, 2400);
+    await dismissGoogleConsent(page);
+    await humanMouseMove(page);
+    await humanScroll(page);
+    await randomDelay(1500, 3000);
+    steps.push("google");
+
+    const searchBox = page.locator("textarea[name='q'], input[name='q']").first();
+    if (await searchBox.isVisible({ timeout: 4000 }).catch(() => false)) {
+      const query = WARMUP_QUERIES[Math.floor(Math.random() * WARMUP_QUERIES.length)];
+      await searchBox.click().catch(() => {});
+      await humanType(searchBox, query);
+      await randomDelay(400, 900);
+      await page.keyboard.press("Enter").catch(() => {});
+      await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
+      await randomDelay(1500, 3000);
+      await humanScroll(page);
+      await randomDelay(1200, 2600);
+      steps.push("search");
+    }
+
+    await page.goto("https://www.youtube.com/", { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
+    await randomDelay(1500, 3000);
+    await dismissGoogleConsent(page);
+    await humanScroll(page);
+    await randomDelay(1500, 3200);
+    steps.push("youtube");
+
+    await onEvent("google_auth_warmup_completed", { steps });
+  } catch (error) {
+    await onEvent("google_auth_warmup_failed", { error: error.message, steps });
+  }
+}
+
 async function generateGoogleAuthCookies({ email, password, twoFaSecret, headless, deviceMode, proxyUrl, captchaApiKey = "", onEvent = async () => {} }) {
   const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
 
@@ -502,6 +580,13 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     await onEvent("google_auth_context_started", { email, hasProxy: Boolean(proxyUrl) });
+
+    // Warm the proxy IP + session before signin so Google doesn't flag the flow and throw the
+    // unsolvable enterprise reCAPTCHA. Disable with GAUTH_WARMUP=0.
+    if (process.env.GAUTH_WARMUP !== "0") {
+      await warmUpSession(page, onEvent);
+    }
+
     await page.goto(DEFAULT_LOGIN_URL, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
     await randomDelay(700, 1400);
     await humanMouseMove(page);
@@ -528,7 +613,7 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
         return { success: false, error: "google_unsafe_browser", failureReason: "unsafe_browser", url: unsafeAfterEmail.url };
       }
 
-      const recaptchaAfterEmail = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
+      const recaptchaAfterEmail = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, undefined, proxyUrl);
       if (!recaptchaAfterEmail.success) {
         return recaptchaAfterEmail;
       }
@@ -555,7 +640,7 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
       return { success: false, error: "google_unsafe_browser", failureReason: "unsafe_browser", url: unsafeAfterPassword.url };
     }
 
-    const recaptchaAfterPassword = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
+    const recaptchaAfterPassword = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, undefined, proxyUrl);
     if (!recaptchaAfterPassword.success) {
       return recaptchaAfterPassword;
     }
@@ -567,7 +652,7 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
     }
 
     await dismissOptionalPrompts(page);
-    const recaptchaAfterTwoFa = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent);
+    const recaptchaAfterTwoFa = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, undefined, proxyUrl);
     if (!recaptchaAfterTwoFa.success) {
       return recaptchaAfterTwoFa;
     }

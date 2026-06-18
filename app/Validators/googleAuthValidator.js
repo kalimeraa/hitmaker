@@ -261,6 +261,8 @@ function validateCookieGenerationPayload(body = {}) {
     deviceMode,
     proxyUrl,
     captchaApiKey: normalizeOptionalText(body.captchaApiKey).slice(0, 120),
+    proxyProvider: normalizeOptionalText(body.proxyProvider).toLowerCase().slice(0, 60),
+    proxyResetUrl: normalizeOptionalText(body.proxyResetUrl).slice(0, 500),
     notes: normalizeOptionalText(body.notes).slice(0, 500)
   };
 }
@@ -286,21 +288,15 @@ async function validateAccountImportPayload(body = {}) {
   }
 
   const fallbackProxyUrl = normalizeProxyUrl(body.proxyUrl);
-  const proxyList = normalizeOptionalText(body.proxyList)
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(normalizeProxyUrl);
 
-  const accounts = rows.slice(1).map((row, index) => {
+  const accounts = rows.slice(1).map((row) => {
     const rowProxy = proxyIndex >= 0 ? normalizeProxyUrl(row[proxyIndex]) : "";
-    const listProxy = proxyList.length ? proxyList[index % proxyList.length] : "";
     const email = normalizeEmail(row[emailIndex]);
     const account = {
       email,
       password: normalizeOptionalText(row[passwordIndex]),
       twoFaSecret: normalizeOptionalText(row[twoFaIndex]),
-      proxyUrl: rowProxy || listProxy || fallbackProxyUrl,
+      proxyUrl: rowProxy || fallbackProxyUrl,
       status: "active",
       notes: normalizeOptionalText(noteIndex >= 0 ? row[noteIndex] : "") || "local spreadsheet import"
     };

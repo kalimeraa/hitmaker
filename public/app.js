@@ -725,7 +725,6 @@ function renderGoogleAuthAccount(account) {
       <div class="google-auth-actions">
         <button class="btn btn-outline-primary btn-sm" type="button" data-google-auth-generate="${escapeHtml(accountId)}">Çerez üret</button>
         ${account.lastCookiePoolId ? `<a class="btn btn-outline-success btn-sm" href="${escapeHtml(cookieDownloadUrl)}">Dosya indir</a>` : ""}
-        <button class="btn btn-outline-secondary btn-sm" type="button" data-google-auth-edit="${escapeHtml(accountId)}">Düzenle</button>
         <button class="btn btn-outline-danger btn-sm" type="button" data-google-auth-delete="${escapeHtml(accountId)}">Sil</button>
       </div>
     </div>
@@ -875,8 +874,7 @@ async function importGoogleAuthAccounts() {
       content: isSpreadsheetFile(file) ? await readFileAsBase64(file) : await readTextFile(file),
       fileName: file.name || "",
       contentType: file.type || "",
-      proxyUrl: cleanOptionalText($("#googleAuthImportProxyUrl").val()),
-      proxyList: cleanOptionalText($("#googleAuthImportProxyList").val()),
+      proxyUrl: cleanOptionalText($("#googleAuthProxyUrl").val()),
       autoGenerate: $("#googleAuthImportAutoGenerate").is(":checked")
     })
   });
@@ -907,12 +905,26 @@ async function generateGoogleAuthCookies(accountId, button) {
         deviceMode: $("#googleAuthDeviceMode").val(),
         proxyUrl,
         captchaApiKey: cleanOptionalText($("#googleAuthCaptchaApiKey").val()),
+        proxyResetUrl: cleanOptionalText($("#googleAuthProxyResetUrl").val()),
         notes: `Google auth UI üretimi · ${new Date().toLocaleString()}`
       })
     });
     await loadGoogleAuthAccounts();
     await loadCookies();
     alert(`${result.cookieCount || 0} Google cookie havuza ve dosyaya kaydedildi.`);
+  } catch (error) {
+    const serverMsg = (error && error.responseJSON && error.responseJSON.error) || (error && error.statusText) || "";
+    let message;
+    if (/recaptcha_required|recaptcha_unsolved|recaptcha_challenge/i.test(serverMsg)) {
+      message = "Google captcha çıkardı. Headless'i KAPAT (görünür mod) ve captcha'yı elle çöz — akış devam edip çerezleri kaydeder. Bu hesaplar için tek güvenilir yol manuel çözüm.";
+    } else if (/TUNNEL_CONNECTION_FAILED|tunnel|proxy/i.test(serverMsg)) {
+      message = "Proxy bağlantısı kurulamadı (tünel hatası). 'Proxy' alanına çalışan proxy'i yaz: http://...@ankara8.buymobileproxy.com:8045";
+    } else if (/unsafe_browser/i.test(serverMsg)) {
+      message = "Google bu tarayıcıyı güvensiz buldu. Proxy/hesap değiştir veya görünür modda dene.";
+    } else {
+      message = `Üretim durdu: ${serverMsg || "bilinmeyen hata"}`;
+    }
+    alert(message);
   } finally {
     $button.prop("disabled", false).text(originalText);
   }
@@ -1113,10 +1125,19 @@ $(document).on("click", "[data-apply-browser-capacity]", function () {
 });
 $(document).on("input change", "[data-proxy-builder] [data-proxy-field]", function () {
   applyProxyBuilder(String($(this).closest("[data-proxy-builder]").data("proxy-builder")));
+  toggleGoogleAuthProxyReset();
 });
 $(document).on("input", "[data-proxy-url]", function () {
   setProxyBuilderFromUrl(String($(this).data("proxy-url")), $(this).val());
+  toggleGoogleAuthProxyReset();
 });
+
+// Proxy reset link alanı yalnızca çerez üretim proxy'si bir buymobileproxy provider'ı ise gösterilir.
+function toggleGoogleAuthProxyReset() {
+  const proxy = String($("#googleAuthProxyUrl").val() || "").toLowerCase();
+  $("#googleAuthProxyResetWrap").toggleClass("d-none", !proxy.includes("buymobileproxy"));
+}
+$(document).on("input", "#googleAuthProxyUrl", toggleGoogleAuthProxyReset);
 $(document).on("change", "[data-cookie-file]", function () {
   const files = Array.from(this.files || []);
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -1193,6 +1214,7 @@ syncCookieSource("create");
 syncCookieSource("edit");
 syncProxyPreview("create");
 syncProxyPreview("edit");
+toggleGoogleAuthProxyReset();
 sanitizeOptionalFields();
 checkHealth();
 loadBrowserCapacity();
