@@ -20,7 +20,10 @@ const googleAuthAccountSchema = new mongoose.Schema(
     lastCookieFileName: String,
     lastCookieGeneratedAt: Date,
     lastLoginUrl: String,
-    lastError: String
+    lastError: String,
+    // Son başarısız üretimi durduran Google challenge'ı: "" | "phone_verification" | "recaptcha_challenge"
+    // | "2fa_challenge" | "unsafe_browser". "phone_verification" pratikte hesabın yandığını gösterir.
+    lastChallenge: { type: String, default: "" }
   },
   { timestamps: true }
 );

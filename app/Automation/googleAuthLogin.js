@@ -75,8 +75,42 @@ function isRecaptchaChallengeUrl(url = "") {
   return /accounts\.google\.com\/.*signin\/challenge\/recaptcha/i.test(url);
 }
 
+// Google telefon (SMS) doğrulama duvarı: /signin/challenge/iap (identity assurance phone),
+// /challenge/ipp, /challenge/dp. Bu, hesabın yüksek riskli işaretlendiğini (pratikte yandığını) gösterir.
+function isPhoneChallengeUrl(url = "") {
+  return /accounts\.google\.com\/.*signin\/challenge\/(iap|ipp|dp)\b/i.test(url);
+}
+
 function isTwoFactorChallengeUrl(url = "") {
-  return /accounts\.google\.com\/.*signin\/challenge/i.test(url) && !isRecaptchaChallengeUrl(url);
+  return /accounts\.google\.com\/.*signin\/challenge/i.test(url)
+    && !isRecaptchaChallengeUrl(url)
+    && !isPhoneChallengeUrl(url);
+}
+
+// Telefon doğrulama challenge'ını URL veya metinden tespit eder. iap URL'i 2FA URL desenine de
+// uyduğu için ÖNCE bunu kontrol etmek gerekir; aksi halde TOTP kodu telefon alanına yazılmaya çalışılır.
+async function detectPhoneVerificationChallenge(page) {
+  const url = page.url();
+  if (isPhoneChallengeUrl(url)) {
+    return { reason: "phone_url", url };
+  }
+
+  const textCandidates = [
+    "Enter a phone number to get a text message",
+    "get a text message with a verification code",
+    "There is something unusual about your activity",
+    "Telefon numarası girin",
+    "doğrulama kodu içeren bir kısa mesaj"
+  ];
+
+  for (const text of textCandidates) {
+    const visible = await page.getByText(text, { exact: false }).first().isVisible({ timeout: 800 }).catch(() => false);
+    if (visible) {
+      return { reason: "phone_text", url, text };
+    }
+  }
+
+  return null;
 }
 
 async function detectTwoFactorChallenge(page) {
@@ -531,14 +565,46 @@ const WARMUP_QUERIES = ["hava durumu", "euro kaç tl", "bugün maçlar", "haberl
 // NID/CONSENT cookies and gives the IP legitimate traffic, dropping the signin risk score so the
 // captcha usually never appears. Best-effort: never throws, never blocks login on failure.
 // Disable with GAUTH_WARMUP=0.
-async function warmUpSession(page, onEvent = async () => {}) {
+// google.com/sorry/index — Google Search'ün "unusual traffic" reCAPTCHA'sı. Signin'in çözülemeyen
+// enterprise image challenge'ından FARKLI: data-sitekey + data-s'li klasik checkbox; 2captcha'nın
+// tam desteklediği senaryo. Çözmek hem warmup'ı tamamlar hem IP'nin "unusual traffic" bloğunu
+// kaldırır → sonraki signin'e yardım eder.
+function isGoogleSorryUrl(url = "") {
+  return /google\.[^/]+\/sorry\//i.test(url);
+}
+
+async function solveGoogleSorryIfPresent(page, { captchaApiKey, proxyUrl, onEvent }) {
+  if (page.isClosed() || !isGoogleSorryUrl(page.url())) {
+    return false;
+  }
+  await onEvent("google_auth_search_captcha_detected", { url: page.url() });
+  if (!hasApiKey(captchaApiKey)) {
+    await onEvent("google_auth_search_captcha_skipped", { reason: "captcha_api_key_missing" });
+    return false;
+  }
+  const solve = await solveRecaptchaOnPage(page, { apiKey: captchaApiKey, onEvent, proxyUrl });
+  if (!solve.success) {
+    await onEvent("google_auth_search_captcha_failed", { error: solve.error });
+    return false;
+  }
+  // submitCallback token enjekte edilip callback tetiklenince formu submit eder → /sorry'den çıkar.
+  await page.waitForLoadState("domcontentloaded", { timeout: 20000 }).catch(() => {});
+  await randomDelay(1500, 2800);
+  const cleared = !isGoogleSorryUrl(page.url());
+  await onEvent("google_auth_search_captcha_result", { cleared, url: page.isClosed() ? "" : page.url() });
+  return cleared;
+}
+
+async function warmUpSession(page, onEvent = async () => {}, { captchaApiKey = "", proxyUrl = "" } = {}) {
   const steps = [];
+  const solveSorry = () => solveGoogleSorryIfPresent(page, { captchaApiKey, proxyUrl, onEvent }).catch(() => false);
   try {
     await onEvent("google_auth_warmup_started", {});
 
     await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
     await randomDelay(1200, 2400);
     await dismissGoogleConsent(page);
+    await solveSorry();
     await humanMouseMove(page);
     await humanScroll(page);
     await randomDelay(1500, 3000);
@@ -553,6 +619,8 @@ async function warmUpSession(page, onEvent = async () => {}) {
       await page.keyboard.press("Enter").catch(() => {});
       await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
       await randomDelay(1500, 3000);
+      // Search "unusual traffic" /sorry captcha'sı genelde tam burada çıkar; 2captcha ile çöz.
+      await solveSorry();
       await humanScroll(page);
       await randomDelay(1200, 2600);
       steps.push("search");
@@ -561,6 +629,7 @@ async function warmUpSession(page, onEvent = async () => {}) {
     await page.goto("https://www.youtube.com/", { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
     await randomDelay(1500, 3000);
     await dismissGoogleConsent(page);
+    await solveSorry();
     await humanScroll(page);
     await randomDelay(1500, 3200);
     steps.push("youtube");
@@ -584,7 +653,7 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
     // Warm the proxy IP + session before signin so Google doesn't flag the flow and throw the
     // unsolvable enterprise reCAPTCHA. Disable with GAUTH_WARMUP=0.
     if (process.env.GAUTH_WARMUP !== "0") {
-      await warmUpSession(page, onEvent);
+      await warmUpSession(page, onEvent, { captchaApiKey, proxyUrl });
     }
 
     await page.goto(DEFAULT_LOGIN_URL, { waitUntil: "domcontentloaded", timeout: taskTimeoutMs });
@@ -643,6 +712,19 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
     const recaptchaAfterPassword = await waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, undefined, proxyUrl);
     if (!recaptchaAfterPassword.success) {
       return recaptchaAfterPassword;
+    }
+
+    // Telefon (SMS) doğrulama duvarı: hesap yüksek riskli işaretlenmiş, otomasyonla geçilemez.
+    // 2FA kontrolünden ÖNCE bakılır (iap URL'i 2FA desenine de uyar).
+    const phoneChallenge = await detectPhoneVerificationChallenge(page);
+    if (phoneChallenge) {
+      await onEvent("google_auth_phone_verification_required", { email, url: phoneChallenge.url, reason: phoneChallenge.reason });
+      return {
+        success: false,
+        error: "google_phone_verification_required",
+        failureReason: "phone_verification",
+        url: phoneChallenge.url
+      };
     }
 
     const twoFaResult = await handleTwoFactorChallenge(page, twoFaSecret, onEvent);

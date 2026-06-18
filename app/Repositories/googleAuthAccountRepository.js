@@ -33,7 +33,8 @@ class GoogleAuthAccountRepository {
         lastCookieFileName: payload.cookieFileName || "",
         lastCookieGeneratedAt: new Date(),
         lastLoginUrl: payload.loginUrl || "",
-        lastError: ""
+        lastError: "",
+        lastChallenge: ""
       }
     }, { new: true });
   }
@@ -47,11 +48,12 @@ class GoogleAuthAccountRepository {
     }, { new: true });
   }
 
-  markLoginFailed(id, error, loginUrl = "") {
+  markLoginFailed(id, error, loginUrl = "", challenge = "") {
     return GoogleAuthAccount.findByIdAndUpdate(id, {
       $set: {
         lastError: error,
-        lastLoginUrl: loginUrl
+        lastLoginUrl: loginUrl,
+        lastChallenge: challenge
       }
     }, { new: true });
   }

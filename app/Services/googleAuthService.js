@@ -364,8 +364,8 @@ class GoogleAuthService {
     });
 
     if (!result.success) {
-      await this.accountRepository.markLoginFailed(id, result.error || "Google auth failed", result.url || "");
-      await realtimeEventService.publish("googleAuth.updated", { action: "failed", accountId: String(account._id) });
+      await this.accountRepository.markLoginFailed(id, result.error || "Google auth failed", result.url || "", result.failureReason || "");
+      await realtimeEventService.publish("googleAuth.updated", { action: "failed", accountId: String(account._id), challenge: result.failureReason || "" });
       throw new HttpError(400, result.error || "Google auth failed");
     }
 

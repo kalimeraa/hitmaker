@@ -699,6 +699,20 @@ async function deleteCookiePoolItem(cookieId) {
   await $.ajax({ method: "DELETE", url: `/api/cookies/${encodeURIComponent(cookieId)}` });
 }
 
+// Son üretimi durduran Google challenge'ını insanca bir rozete çevirir. phone_verification, hesabın
+// pratikte yandığını gösterir (otomasyonla geçilemez).
+function googleAuthChallengeBadge(challenge) {
+  const map = {
+    phone_verification: { label: "📵 telefon doğrulama · yanmış", cls: "google-auth-challenge-burned" },
+    recaptcha_challenge: { label: "🤖 captcha takıldı", cls: "google-auth-challenge-warn" },
+    "2fa_challenge": { label: "🔐 2FA takıldı", cls: "google-auth-challenge-warn" },
+    unsafe_browser: { label: "⚠️ güvensiz tarayıcı", cls: "google-auth-challenge-warn" }
+  };
+  const entry = map[challenge];
+  if (!entry) return "";
+  return `<span class="google-auth-challenge ${entry.cls}">${entry.label}</span>`;
+}
+
 function renderGoogleAuthAccount(account) {
   const accountId = String(account._id || account.id);
   const lastGenerated = account.lastCookieGeneratedAt ? new Date(account.lastCookieGeneratedAt).toLocaleString() : "-";
@@ -721,7 +735,7 @@ function renderGoogleAuthAccount(account) {
         ${account.lastError ? `<div class="task-meta text-danger">${escapeHtml(account.lastError)}</div>` : ""}
         ${account.notes ? `<div class="task-meta">${escapeHtml(account.notes)}</div>` : ""}
       </div>
-      <div>${statusBadge(account.status || "active")}</div>
+      <div>${statusBadge(account.status || "active")}${googleAuthChallengeBadge(account.lastChallenge)}</div>
       <div class="google-auth-actions">
         <button class="btn btn-outline-primary btn-sm" type="button" data-google-auth-generate="${escapeHtml(accountId)}">Çerez üret</button>
         ${account.lastCookiePoolId ? `<a class="btn btn-outline-success btn-sm" href="${escapeHtml(cookieDownloadUrl)}">Dosya indir</a>` : ""}
