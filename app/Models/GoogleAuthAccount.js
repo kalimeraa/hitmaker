@@ -15,6 +15,13 @@ const googleAuthAccountSchema = new mongoose.Schema(
       enum: ["active", "disabled"],
       default: "active"
     },
+    source: {
+      type: String,
+      enum: ["import", "created"],
+      default: "import"
+    },
+    firstName: { type: String, trim: true, default: "" },
+    lastName: { type: String, trim: true, default: "" },
     lastCookiePoolId: String,
     lastCookieFilePath: String,
     lastCookieFileName: String,

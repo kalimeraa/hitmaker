@@ -857,5 +857,15 @@ async function generateGoogleAuthCookies({ email, password, twoFaSecret, headles
 module.exports = {
   generateGoogleAuthCookies,
   generateTotp,
-  normalizeTwoFaSecret
+  normalizeTwoFaSecret,
+  warmUpSession,
+  humanType,
+  humanMouseMove,
+  humanHoverClick,
+  humanScroll,
+  clickNext,
+  randomDelay,
+  delay,
+  detectRecaptchaChallenge,
+  waitForManualRecaptchaIfNeeded
 };

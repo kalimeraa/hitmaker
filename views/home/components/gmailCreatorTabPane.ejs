@@ -1,0 +1,46 @@
+<div class="tab-pane fade" id="gmailCreatorPane">
+  <div class="toolbar">
+    <h2>Gmail Creator</h2>
+    <div class="toolbar-actions">
+      <span class="live-indicator" id="gmailCreatorLiveState">live</span>
+    </div>
+  </div>
+
+  <div class="alert alert-info py-2 small mb-3">
+    Hesap oluşturma <strong>her zaman görünür tarayıcıda</strong> çalışır. Captcha veya telefon doğrulaması çıkarsa pencerede elle tamamlayın.
+    Signin captcha'sı 2captcha ile geçilmez; bu akış insan müdahalesi bekler.
+  </div>
+
+  <form id="gmailCreatorForm" class="google-auth-options" autocomplete="off">
+    <div>
+      <label class="form-label" for="gmailCreatorProxyUrl">Proxy</label>
+      <input class="form-control" id="gmailCreatorProxyUrl" autocomplete="off" placeholder="http://user:pass@host:port">
+    </div>
+    <div id="gmailCreatorProxyResetWrap" class="d-none">
+      <label class="form-label" for="gmailCreatorProxyResetUrl">Proxy reset link <span class="text-muted small">· buymobileproxy</span></label>
+      <input class="form-control" id="gmailCreatorProxyResetUrl" autocomplete="off" placeholder="https://buymobileproxy.com/api/reset.php?key=...">
+      <div class="form-text">Panelde IP yenileme aralığını <strong>Manuel</strong> yapın.</div>
+    </div>
+    <div>
+      <label class="form-label" for="gmailCreatorDeviceMode">Ekran</label>
+      <select class="form-select" id="gmailCreatorDeviceMode">
+        <option value="desktop" selected>Desktop</option>
+        <option value="mobile">Mobil</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label" for="gmailCreatorCount">Adet</label>
+      <input class="form-control" id="gmailCreatorCount" type="number" min="1" max="5" value="1">
+      <div class="form-text">Sırayla oluşturulur. Düşük hacim önerilir.</div>
+    </div>
+    <div>
+      <label class="form-label" for="gmailCreatorMaxAttempts">Deneme (IP rotasyon)</label>
+      <input class="form-control" id="gmailCreatorMaxAttempts" type="number" min="1" max="5" value="3">
+    </div>
+    <div class="d-flex align-items-end">
+      <button class="btn btn-primary" type="submit" id="gmailCreatorStartBtn">Hesap oluştur</button>
+    </div>
+  </form>
+
+  <div id="gmailCreatorJobs" class="google-auth-list mt-3"></div>
+</div>

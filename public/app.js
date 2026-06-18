@@ -8,6 +8,7 @@ let taskPage = 1;
 let allTasks = [];
 let allCookies = [];
 let allGoogleAuthAccounts = [];
+let allGmailCreatorJobs = [];
 let browserCapacity = null;
 const runPages = new Map();
 let pendingTaskLoad = null;
@@ -726,7 +727,7 @@ function renderGoogleAuthAccount(account) {
   return `
     <div class="google-auth-row">
       <div>
-        <div class="fw-semibold">${escapeHtml(account.email)}</div>
+        <div class="fw-semibold">${escapeHtml(account.email)}${account.source === "created" ? ' <span class="badge text-bg-info">bot</span>' : ""}</div>
         <div class="task-meta">${escapeHtml(secretFlags)} · son üretim ${escapeHtml(lastGenerated)}</div>
         ${account.proxyUrl ? `<div class="task-meta google-auth-file-path">proxy: ${escapeHtml(account.proxyUrl)}</div>` : ""}
         ${account.lastCookiePoolId ? `<div class="task-meta">cookie: ${escapeHtml(account.lastCookiePoolId)}</div>` : ""}
@@ -945,6 +946,124 @@ async function generateGoogleAuthCookies(accountId, button) {
   }
 }
 
+function gmailCreatorStatusBadge(status) {
+  const map = {
+    queued: { label: "queued", cls: "text-bg-secondary" },
+    running: { label: "running", cls: "text-bg-primary" },
+    awaiting_manual: { label: "elle müdahale", cls: "text-bg-warning" },
+    completed: { label: "completed", cls: "text-bg-success" },
+    failed: { label: "failed", cls: "text-bg-danger" }
+  };
+  const entry = map[status] || { label: status || "-", cls: "text-bg-secondary" };
+  return `<span class="badge ${entry.cls}">${escapeHtml(entry.label)}</span>`;
+}
+
+function renderGmailCreatorJob(job) {
+  const jobId = String(job._id || job.id);
+  const createdAt = job.createdAt ? new Date(job.createdAt).toLocaleString() : "-";
+  const identity = job.email
+    ? escapeHtml(job.email)
+    : `${escapeHtml(job.firstName || "")} ${escapeHtml(job.lastName || "")}`.trim() || "—";
+
+  return `
+    <div class="google-auth-row">
+      <div>
+        <div class="fw-semibold">${identity}</div>
+        <div class="task-meta">${escapeHtml(job.firstName || "")} ${escapeHtml(job.lastName || "")} · ${escapeHtml(createdAt)}</div>
+        ${job.password ? `<div class="task-meta">şifre kayıtlı · account: ${escapeHtml(job.accountId || "-")}</div>` : ""}
+        ${job.manualHint ? `<div class="task-meta text-warning">${escapeHtml(job.manualHint)}</div>` : ""}
+        ${job.lastError ? `<div class="task-meta text-danger">${escapeHtml(job.lastError)}</div>` : ""}
+        ${job.proxyUrl ? `<div class="task-meta google-auth-file-path">proxy: ${escapeHtml(job.proxyUrl)}</div>` : ""}
+      </div>
+      <div>${gmailCreatorStatusBadge(job.status)}</div>
+      <div class="google-auth-actions">
+        ${job.status === "failed" ? `<button class="btn btn-outline-primary btn-sm" type="button" data-gmail-creator-retry="${escapeHtml(jobId)}">Tekrar dene</button>` : ""}
+        <button class="btn btn-outline-danger btn-sm" type="button" data-gmail-creator-delete="${escapeHtml(jobId)}">Sil</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderGmailCreatorJobs() {
+  $("#gmailCreatorJobs").html(
+    allGmailCreatorJobs.length
+      ? allGmailCreatorJobs.map(renderGmailCreatorJob).join("")
+      : '<div class="empty-state">Gmail creator job yok.</div>'
+  );
+}
+
+async function loadGmailCreatorJobs() {
+  allGmailCreatorJobs = await $.getJSON("/api/gmail-creator");
+  renderGmailCreatorJobs();
+}
+
+function toggleGmailCreatorProxyReset() {
+  const proxy = String($("#gmailCreatorProxyUrl").val() || "").toLowerCase();
+  $("#gmailCreatorProxyResetWrap").toggleClass("d-none", !proxy.includes("buymobileproxy"));
+}
+
+async function startGmailCreatorJobs() {
+  const $button = $("#gmailCreatorStartBtn");
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Oluşturuluyor...");
+
+  try {
+    const result = await $.ajax({
+      method: "POST",
+      url: "/api/gmail-creator",
+      contentType: "application/json",
+      data: JSON.stringify({
+        count: Number($("#gmailCreatorCount").val()) || 1,
+        proxyUrl: cleanOptionalText($("#gmailCreatorProxyUrl").val()),
+        proxyResetUrl: cleanOptionalText($("#gmailCreatorProxyResetUrl").val()),
+        maxAttempts: Number($("#gmailCreatorMaxAttempts").val()) || 3,
+        deviceMode: $("#gmailCreatorDeviceMode").val()
+      })
+    });
+    await loadGmailCreatorJobs();
+    await loadGoogleAuthAccounts();
+    alert(`${result.successCount || 0} başarılı, ${result.failedCount || 0} hatalı. Tarayıcı açıkken captcha/telefon adımlarını elle tamamlayın.`);
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Gmail hesabı oluşturulamadı"));
+    await loadGmailCreatorJobs();
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
+async function retryGmailCreatorJob(jobId, button) {
+  const $button = $(button);
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Deneniyor...");
+
+  try {
+    await $.ajax({
+      method: "POST",
+      url: `/api/gmail-creator/${encodeURIComponent(jobId)}/retry`,
+      contentType: "application/json",
+      data: JSON.stringify({
+        proxyUrl: cleanOptionalText($("#gmailCreatorProxyUrl").val()),
+        proxyResetUrl: cleanOptionalText($("#gmailCreatorProxyResetUrl").val()),
+        maxAttempts: Number($("#gmailCreatorMaxAttempts").val()) || 3,
+        deviceMode: $("#gmailCreatorDeviceMode").val()
+      })
+    });
+    await loadGmailCreatorJobs();
+    await loadGoogleAuthAccounts();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Gmail creator retry başarısız"));
+    await loadGmailCreatorJobs();
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
+async function deleteGmailCreatorJob(jobId) {
+  if (!confirm("Gmail creator job silinsin mi?")) return;
+  await $.ajax({ method: "DELETE", url: `/api/gmail-creator/${encodeURIComponent(jobId)}` });
+  await loadGmailCreatorJobs();
+}
+
 async function checkHealth() {
   try {
     await $.getJSON("/api/health");
@@ -1093,6 +1212,19 @@ $("#googleAuthAccounts").on("click", "[data-google-auth-generate]", function () 
     loadGoogleAuthAccounts();
   });
 });
+$("#gmailCreatorForm").on("submit", async function (event) {
+  event.preventDefault();
+  await startGmailCreatorJobs();
+});
+$(document).on("input", "#gmailCreatorProxyUrl", toggleGmailCreatorProxyReset);
+$("#gmailCreatorJobs").on("click", "[data-gmail-creator-retry]", function () {
+  retryGmailCreatorJob($(this).data("gmail-creator-retry"), this);
+});
+$("#gmailCreatorJobs").on("click", "[data-gmail-creator-delete]", function () {
+  deleteGmailCreatorJob($(this).data("gmail-creator-delete")).catch((error) => {
+    alert(extractAjaxErrorMessage(error, "Gmail creator job silinemedi"));
+  });
+});
 $("#googleAuthImportFile").on("change", function () {
   const file = (this.files || [])[0];
   $("#googleAuthImportFileName").text(file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV");
@@ -1163,7 +1295,7 @@ $(document).on("change", "[data-cookie-file]", function () {
 });
 
 function setStreamState(online) {
-  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState, #googleAuthLiveState")
+  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState, #googleAuthLiveState, #gmailCreatorLiveState")
     .toggleClass("is-offline", !online)
     .text(online ? "live" : "reconnecting");
 }
@@ -1176,6 +1308,7 @@ events.addEventListener("error", () => setStreamState(false));
 events.addEventListener("task.updated", scheduleLoadTasks);
 events.addEventListener("cookie.updated", loadCookies);
 events.addEventListener("googleAuth.updated", loadGoogleAuthAccounts);
+events.addEventListener("gmailCreator.updated", loadGmailCreatorJobs);
 events.addEventListener("task.deleted", (event) => {
   const payload = JSON.parse(event.data);
   allTasks = allTasks.filter((task) => String(task._id) !== String(payload.taskId));
@@ -1230,11 +1363,13 @@ syncCookieSource("edit");
 syncProxyPreview("create");
 syncProxyPreview("edit");
 toggleGoogleAuthProxyReset();
+toggleGmailCreatorProxyReset();
 sanitizeOptionalFields();
 checkHealth();
 loadBrowserCapacity();
 loadTasks();
 loadCookies();
 loadGoogleAuthAccounts();
+loadGmailCreatorJobs();
 loadLogs();
 loadErrors();
