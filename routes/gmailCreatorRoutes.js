@@ -1,6 +1,6 @@
 const express = require("express");
 const gmailCreatorController = require("../app/Http/Controllers/gmailCreatorController");
-const asyncHandler = require("../app/Http/Middleware/asyncHandler");
+const { asyncHandler } = require("../app/Http/Middleware/asyncHandler");
 
 const router = express.Router();
 
