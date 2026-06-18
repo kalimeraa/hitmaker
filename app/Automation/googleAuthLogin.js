@@ -181,35 +181,94 @@ async function detectUnsafeBrowser(page) {
   return null;
 }
 
+const TYPO_NEIGHBORS = {
+  a: "sq", e: "wr", i: "ou", o: "ip", u: "yi", r: "et", s: "ad", t: "ry",
+  n: "mb", l: "ko", c: "xv", d: "sf", m: "n", g: "fh", h: "gj"
+};
+
+// İnsan gibi yazar: değişken tuş gecikmesi + ara sıra (~%8) komşu-tuş typo'su yapıp backspace ile
+// düzeltir. Şifre/2FA gibi alanlarda da çalışır; düzeltme yaptığı için sonuç metni doğru kalır.
 async function humanType(locator, text) {
   await locator.focus({ timeout: 10000 });
   await randomDelay(180, 450);
 
-  for (const char of String(text)) {
-    await locator.type(char, { delay: 25 + Math.floor(Math.random() * 55) });
+  const chars = String(text);
+  for (let i = 0; i < chars.length; i += 1) {
+    const char = chars[i];
+    // ~%8 ihtimalle önce yanlış (komşu) harf yaz, sonra sil — gerçek typo davranışı.
+    const lower = char.toLowerCase();
+    if (TYPO_NEIGHBORS[lower] && Math.random() < 0.08) {
+      const neighbors = TYPO_NEIGHBORS[lower];
+      const wrong = neighbors[Math.floor(Math.random() * neighbors.length)];
+      await locator.type(char === char.toUpperCase() && char !== lower ? wrong.toUpperCase() : wrong, { delay: 30 + Math.floor(Math.random() * 60) });
+      await randomDelay(120, 360); // typo'yu fark etme süresi
+      await locator.press("Backspace").catch(() => {});
+      await randomDelay(90, 240);
+    }
+    await locator.type(char, { delay: 30 + Math.floor(Math.random() * 70) });
+    if (Math.random() < 0.12) await randomDelay(150, 500); // arada düşünme molası
   }
 
   await randomDelay(180, 450);
 }
 
-async function humanMouseMove(page) {
-  const viewport = page.viewportSize() || { width: 1366, height: 768 };
-  const width = Math.max(320, viewport.width || 1366);
-  const height = Math.max(320, viewport.height || 768);
+// İnsan eli düz gitmez; her hedefe 2-3 ara nokta üzerinden eğri çizerek, değişken hızla gider ve
+// arada kısa duraklar. CloakBrowser humanize'ı destekler ama biz de gerçek mouse event'leri üretiyoruz.
+async function humanMouseMove(page, moves = 2 + Math.floor(Math.random() * 4)) {
+  const viewport = page.viewportSize() || { width: 1280, height: 800 };
+  const width = Math.max(320, viewport.width || 1280);
+  const height = Math.max(320, viewport.height || 800);
+  let cx = 80 + Math.random() * (width - 160);
+  let cy = 80 + Math.random() * (height - 160);
 
-  for (let index = 0; index < 1 + Math.floor(Math.random() * 2); index += 1) {
-    const x = 80 + Math.floor(Math.random() * Math.max(width - 160, 120));
-    const y = 80 + Math.floor(Math.random() * Math.max(height - 160, 120));
-    await page.mouse.move(x, y, { steps: 5 + Math.floor(Math.random() * 8) }).catch(() => {});
-    await randomDelay(90, 260);
+  for (let i = 0; i < moves; i += 1) {
+    const tx = 60 + Math.random() * (width - 120);
+    const ty = 60 + Math.random() * (height - 120);
+    // 2-3 ara nokta üzerinden eğri (bezier benzeri) yol.
+    const waypoints = 2 + Math.floor(Math.random() * 2);
+    for (let w = 1; w <= waypoints; w += 1) {
+      const t = w / waypoints;
+      const jitterX = (Math.random() - 0.5) * 80;
+      const jitterY = (Math.random() - 0.5) * 80;
+      const px = cx + (tx - cx) * t + jitterX;
+      const py = cy + (ty - cy) * t + jitterY;
+      await page.mouse.move(px, py, { steps: 6 + Math.floor(Math.random() * 12) }).catch(() => {});
+      await randomDelay(40, 140);
+    }
+    cx = tx; cy = ty;
+    if (Math.random() < 0.4) await randomDelay(200, 700); // arada düşünme molası
   }
 }
 
-async function humanScroll(page) {
-  await page.evaluate(() => window.scrollBy(0, 60 + Math.random() * 180)).catch(() => {});
-  await randomDelay(120, 320);
-  await page.evaluate(() => window.scrollBy(0, -30 - Math.random() * 90)).catch(() => {});
-  await randomDelay(100, 260);
+// Bir öğeye mouse'u götürüp (hover) kısa bekleyip tıklar — direkt programatik click yerine insan gibi.
+async function humanHoverClick(page, locator) {
+  try {
+    const box = await locator.boundingBox({ timeout: 5000 });
+    if (box) {
+      const tx = box.x + box.width * (0.3 + Math.random() * 0.4);
+      const ty = box.y + box.height * (0.3 + Math.random() * 0.4);
+      await page.mouse.move(tx, ty, { steps: 8 + Math.floor(Math.random() * 14) }).catch(() => {});
+      await randomDelay(120, 380);
+      await page.mouse.down().catch(() => {});
+      await randomDelay(40, 110);
+      await page.mouse.up().catch(() => {});
+      return true;
+    }
+  } catch (error) { /* fall back to locator click */ }
+  await locator.click({ timeout: 8000 }).catch(() => {});
+  return false;
+}
+
+async function humanScroll(page, rounds = 1 + Math.floor(Math.random() * 3)) {
+  for (let i = 0; i < rounds; i += 1) {
+    const down = 120 + Math.random() * 360;
+    await page.mouse.wheel(0, down).catch(() => page.evaluate((d) => window.scrollBy(0, d), down).catch(() => {}));
+    await randomDelay(350, 1100);
+    if (Math.random() < 0.35) {
+      await page.mouse.wheel(0, -(40 + Math.random() * 120)).catch(() => {});
+      await randomDelay(250, 700);
+    }
+  }
 }
 
 async function fillAndVerify(locator, expectedValue) {
@@ -459,9 +518,10 @@ async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiK
 
   await onEvent("google_auth_recaptcha_required", { email, url: challenge.url, headless, hasApiKey: hasApiKey(captchaApiKey) });
 
-  // 2captcha anahtarı varsa: DAİMA servise gidip çöz. Birkaç deneme yap, kullanıcıyı asla manuel
-  // çözüme bekletme (headless olsun olmasın).
-  if (hasApiKey(captchaApiKey)) {
+  // SADECE HEADLESS'ta 2captcha'ya git (insan yok). GÖRÜNÜR modda 2captcha çalıştırma — signin'de
+  // zaten Google reddediyor + ekranda insan var; aşağıdaki manuel-bekleme döngüsü, kullanıcı captcha'yı
+  // elle çözünce captcha temizlenir temizlenmez ANINDA devam eder (şifre adımına geçer).
+  if (headless && hasApiKey(captchaApiKey)) {
     const maxSolveAttempts = 2;
     for (let attempt = 1; attempt <= maxSolveAttempts; attempt += 1) {
       if (page.isClosed()) break;
@@ -482,7 +542,7 @@ async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiK
     };
   }
 
-  // Anahtar yoksa eski davranış: headless'ta hemen fail, görünür modda manuel bekleme.
+  // Headless'ta insan yok → hemen fail. Görünür modda kullanıcı captcha'yı elle çözene kadar bekle.
   if (headless) {
     return {
       success: false,
@@ -492,8 +552,11 @@ async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiK
     };
   }
 
+  // Görünür mod: captcha'yı ELLE ÇÖZ. Captcha temizlenir temizlenmez (her ~1.5sn kontrol) devam eder.
+  const manualTimeout = Math.max(timeout, 300000);
+  await onEvent("google_auth_recaptcha_manual_wait", { email, url: challenge.url, timeoutMs: manualTimeout });
   const start = Date.now();
-  while (Date.now() - start < timeout) {
+  while (Date.now() - start < manualTimeout) {
     await delay(1500);
     if (page.isClosed()) {
       return {
@@ -595,6 +658,28 @@ async function solveGoogleSorryIfPresent(page, { captchaApiKey, proxyUrl, onEven
   return cleared;
 }
 
+// Arama sonuç sayfasındaki ilk organik (reklam olmayan) sonuca insan gibi tıklayıp hedef sitede gezer,
+// sonra geri döner. Gerçek tarama davranışı + cookie/history birikimi sağlar.
+async function clickOrganicResultAndBrowse(page, onEvent) {
+  try {
+    const link = page.locator("#search a:has(h3), #rso a:has(h3)").first();
+    if (!(await link.isVisible({ timeout: 4000 }).catch(() => false))) return false;
+    await humanMouseMove(page, 2);
+    await humanHoverClick(page, link);
+    await page.waitForLoadState("domcontentloaded", { timeout: 25000 }).catch(() => {});
+    await randomDelay(2000, 4000);
+    await humanMouseMove(page, 3);
+    await humanScroll(page, 2 + Math.floor(Math.random() * 3));
+    await randomDelay(2000, 5000); // sayfada okuma süresi
+    await onEvent("google_auth_warmup_visited", { url: (page.url() || "").slice(0, 80) });
+    await page.goBack({ waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => {});
+    await randomDelay(1200, 2600);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function warmUpSession(page, onEvent = async () => {}, { captchaApiKey = "", proxyUrl = "" } = {}) {
   const steps = [];
   const solveSorry = () => solveGoogleSorryIfPresent(page, { captchaApiKey, proxyUrl, onEvent }).catch(() => false);
@@ -602,26 +687,32 @@ async function warmUpSession(page, onEvent = async () => {}, { captchaApiKey = "
     await onEvent("google_auth_warmup_started", {});
 
     await page.goto("https://www.google.com/", { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => {});
-    await randomDelay(1200, 2400);
+    await randomDelay(1500, 3000);
     await dismissGoogleConsent(page);
     await solveSorry();
-    await humanMouseMove(page);
+    await humanMouseMove(page, 3);
     await humanScroll(page);
     await randomDelay(1500, 3000);
     steps.push("google");
 
-    const searchBox = page.locator("textarea[name='q'], input[name='q']").first();
-    if (await searchBox.isVisible({ timeout: 4000 }).catch(() => false)) {
+    // 1-2 doğal arama + sonuç tıklama + sitede gezinme.
+    const searchRounds = 1 + Math.floor(Math.random() * 2);
+    for (let round = 0; round < searchRounds; round += 1) {
+      const searchBox = page.locator("textarea[name='q'], input[name='q']").first();
+      if (!(await searchBox.isVisible({ timeout: 4000 }).catch(() => false))) break;
       const query = WARMUP_QUERIES[Math.floor(Math.random() * WARMUP_QUERIES.length)];
-      await searchBox.click().catch(() => {});
+      await humanHoverClick(page, searchBox);
       await humanType(searchBox, query);
-      await randomDelay(400, 900);
+      await randomDelay(400, 1100);
       await page.keyboard.press("Enter").catch(() => {});
       await page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});
       await randomDelay(1500, 3000);
-      // Search "unusual traffic" /sorry captcha'sı genelde tam burada çıkar; 2captcha ile çöz.
+      // "unusual traffic" /sorry captcha'sı genelde tam burada çıkar; 2captcha ile çöz.
       await solveSorry();
-      await humanScroll(page);
+      await humanMouseMove(page, 2);
+      await humanScroll(page, 2);
+      // Sonuca tıklayıp gerçek sitede gez (ilk roundda daha olası).
+      if (Math.random() < 0.8) await clickOrganicResultAndBrowse(page, onEvent);
       await randomDelay(1200, 2600);
       steps.push("search");
     }
@@ -630,8 +721,9 @@ async function warmUpSession(page, onEvent = async () => {}, { captchaApiKey = "
     await randomDelay(1500, 3000);
     await dismissGoogleConsent(page);
     await solveSorry();
-    await humanScroll(page);
-    await randomDelay(1500, 3200);
+    await humanMouseMove(page, 3);
+    await humanScroll(page, 2 + Math.floor(Math.random() * 2));
+    await randomDelay(2000, 4000);
     steps.push("youtube");
 
     await onEvent("google_auth_warmup_completed", { steps });
@@ -640,8 +732,8 @@ async function warmUpSession(page, onEvent = async () => {}, { captchaApiKey = "
   }
 }
 
-async function generateGoogleAuthCookies({ email, password, twoFaSecret, headless, deviceMode, proxyUrl, captchaApiKey = "", onEvent = async () => {} }) {
-  const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
+async function generateGoogleAuthCookies({ email, password, twoFaSecret, headless, deviceMode, proxyUrl, captchaApiKey = "", profileKey = "", onEvent = async () => {} }) {
+  const context = await launchBrowserContext({ headless, deviceMode, proxyUrl, profileKey });
 
   try {
     const page = await context.newPage();

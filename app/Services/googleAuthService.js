@@ -369,6 +369,7 @@ class GoogleAuthService {
         deviceMode: options.deviceMode,
         proxyUrl: effectiveProxyUrl,
         captchaApiKey: options.captchaApiKey || "",
+        profileKey: String(account._id),
         onEvent
       });
 

@@ -73,16 +73,19 @@ Controller'a iş kuralı, repository'ye workflow, model'e queue/browser logic ya
 ## Google Auth Kuralları
 
 - Google Auth sekmesi lokal hesap havuzu, cookie üretimi ve cookie dosyası yönetimi içindir.
-- Hesaplar tek tek elle kaydedilebilir veya dosyadan import edilebilir.
+- Hesaplar **yalnızca dosyadan import** edilir; manuel tek-hesap kayıt formu kaldırıldı (akış import-odaklı).
 - Import formatları `.xlsx`, `.xls`, `.csv`, `.tsv` ve `.txt`'dir.
 - Kolon eşleştirme `gmail`, `şifre/sifre`, `2fa` başlıkları üzerinden yapılır.
 - Opsiyonel kolonlar `proxy`, `proxyUrl`, `recoveryEmail`, `recoveryPassword`, `telefon/phone`, `not/note/notes` olarak okunabilir.
-- Proxy nullable'dır. Dosyada veya formda proxy yoksa akış direkt bağlantıyla devam eder.
+- UI'da **tek bir "Proxy" alanı** vardır (`#googleAuthProxyUrl`); hem importta atanan proxy hem çerez üretim proxy'si odur. Eski "Hesap proxy"/"Tek proxy"/structured builder kaldırıldı. Structured proxy-builder (`views/home/components/proxyBuilder.ejs`) yalnızca Task formunda kullanılır.
+- Proxy nullable'dır. Proxy yoksa akış direkt bağlantıyla devam eder.
 - Importtan sonra otomatik üretim seçilebilir. Bu durumda import edilen hesaplar sırayla cookie üretimine alınır.
+- Çerez üretim payload alanları: `proxyUrl`, `captchaApiKey`, `proxyResetUrl`, `maxAttempts` (1-5, default 3), `headless`, `deviceMode`, `notes`.
 - Başarılı üretimde cookie'ler MongoDB cookie havuzuna eklenir ve ayrıca `storage/google-auth-cookies/<email>/` altında JSON dosyası olarak yazılır.
 - Tek hesap için `Dosya indir`, tüm hesaplar için `Tüm dosyaları indir` aksiyonu vardır.
 - `Tümünü sil`, yalnızca Google Auth hesap kayıtlarını MongoDB'den siler; cookie havuzu ve dosya çıktıları korunur.
 - Cookie JSON çıktısı `accountId`, `email`, `cookiePoolId`, `generatedAt`, `loginUrl` ve `cookies` alanlarını içerir.
+- Hesap modelinde `lastChallenge` alanı son üretimi durduran challenge'ı tutar (`phone_verification` | `recaptcha_challenge` | `2fa_challenge` | `unsafe_browser` | ""); UI listesinde rozet olarak gösterilir (`phone_verification` = kırmızı "yanmış"). Başarılı üretimde temizlenir.
 Google Auth HTTP endpoint'leri:
 
 ```http
@@ -101,6 +104,12 @@ Google Auth ile ilgili önemli log event'leri:
 
 - `google_auth_accounts_imported`
 - `google_auth_cookie_generation_started`
+- `google_auth_attempt_started` / `google_auth_attempt_failed` (IP-rotasyon-retry döngüsü; `decision: retry|terminal`)
+- `google_auth_proxy_reset_started` / `google_auth_proxy_reset_completed` / `google_auth_proxy_reset_failed` (provider IP reset)
+- `google_auth_warmup_started` / `google_auth_warmup_visited` / `google_auth_warmup_completed` / `google_auth_warmup_failed`
+- `google_auth_search_captcha_detected` / `_skipped` / `_failed` / `_result` (warmup'taki /sorry captcha)
+- `google_auth_phone_verification_required` (telefon SMS duvarı — hesap yanmış)
+- `google_auth_recaptcha_manual_wait` (görünür modda elle çözüm bekleniyor)
 - `google_auth_email_step_started`
 - `google_auth_email_step_completed`
 - `google_auth_password_step_started`
@@ -129,17 +138,22 @@ Google Auth ile ilgili önemli log event'leri:
 
 ## Captcha Çözüm Kuralları
 
-- Google Auth login akışındaki reCAPTCHA, 2captcha servisi (`@2captcha/captcha-solver`) ile otomatik çözülür.
-- İki katman vardır: saf 2captcha API entegrasyonu `app/Services/captchaSolverService.js` içinde (Playwright/DOM bilgisi yok, hem Google Auth hem Task tarafından kullanılır); browser glue (sitekey okuma + token enjeksiyonu) `app/Automation/recaptchaSolver.js` içindedir. SDK başka katmana sızmaz.
-- 2captcha API anahtarı env'den okunmaz. Google Auth sekmesindeki `2captcha API anahtarı` alanından girilir ve çerez üretim isteğiyle (`captchaApiKey`) birlikte servise taşınır. Task tarafında da nullable `captchaApiKey` alanı vardır.
-- API anahtarı boşsa otomatik çözüm denenmez; akış mevcut recaptcha davranışına düşer.
+- Google Auth login akışındaki reCAPTCHA, 2captcha ile otomatik çözülmeye çalışılır.
+- İki katman vardır: saf 2captcha API entegrasyonu `app/Services/captchaSolverService.js` içinde (Playwright/DOM bilgisi yok); browser glue (sitekey okuma + token enjeksiyonu) `app/Automation/recaptchaSolver.js` içindedir.
+- **`captchaSolverService` artık legacy `@2captcha/captcha-solver` SDK yerine yeni `api.2captcha.com/createTask`/`getTaskResult` API'sini doğrudan `fetch` ile kullanır.** Enterprise için `RecaptchaV2EnterpriseTask` + `enterprisePayload: { s: dataS }` + `apiDomain: "google.com"`; non-enterprise için `RecaptchaV2Task` + `recaptchaDataSValue`. Sebep: legacy `datas` param'ı enterprise'da yeterli değil; `s` değeri `enterprisePayload` içinde gönderilmeli (SDK bunu desteklemiyor).
+- **Token IP'ye bağlıdır.** 2captcha'ya bizim **proxy'miz** (`proxyType/proxyAddress/proxyPort/proxyLogin/proxyPassword`) + `userAgent` + `cookies` (`name=value; ...` formatı) geçirilir ki worker bizim exit IP'mizden çözsün. Proxy `recaptchaSolver`'da `proxyUrlToSolverProxy` ile parse edilir.
+- 2captcha API anahtarı env'den okunmaz; Google Auth `2captcha API anahtarı` alanından gelir (`captchaApiKey`).
+- API anahtarı boşsa otomatik çözüm denenmez; görünür modda elle çözüm beklenir.
+- **2captcha SADECE headless modda çağrılır.** Görünür modda (`headless=false`) otomatik çözüm yapılmaz — kullanıcı captcha'yı elle çözer, `waitForManualRecaptchaIfNeeded` captcha temizlenir temizlenmez (~1.5sn poll) devam eder. Sebep: signin token'ı zaten reddediliyor + ekranda insan var (`google_auth_recaptcha_manual_wait`).
 - Sitekey ve `data-s` her zaman DOM'dan okunur; sabit sitekey kullanılmaz. Google signin `data-site-key`/`data-enterprise-site-key` ve `data-client-signature` (data-s) kullanır; bunlar ile anchor iframe'in `&s=` parametresi merge edilir. Enterprise/invisible varyantları otomatik algılanır.
 - Challenge sayfası `/challenge/recaptcha`'ya widget render olmadan düşebilir; bu yüzden sitekey gelene kadar `waitForRecaptchaParams` ile beklenir (varsayılan 25 sn). Hemen "sitekey not found" denmez.
 - Çözülen token `g-recaptcha-response` textarea'sına **sadece `.value`/`.textContent` ile** yazılır. `innerHTML` ATAMASI YASAKTIR: Google signin sayfası Trusted Types zorlar ve `innerHTML` exception fırlatıp tüm enjeksiyonu iptal eder.
 - Token yazıldıktan sonra `grecaptcha.getResponse`/`grecaptcha.enterprise.getResponse` override edilir ve `___grecaptcha_cfg.clients` ağacındaki tüm `callback` fonksiyonları token ile tetiklenir (visited-guard'lı tam traversal).
 - Enterprise çözümü dakikalar sürebilir; bu sırada sayfa kendini reload edebilir. Enjeksiyon `injectRecaptchaTokenStable` ile "execution context destroyed" yarışına karşı retry'lı yapılır. 2captcha'ya giden ağ koparsa (DNS/bağlantı) çözücü süre dolana dek tekrar dener.
 - Otomatik çözüm başarısız olursa headless modda akış `recaptcha_challenge` ile durur; non-headless modda mevcut manuel bekleme path'i korunur.
-- **Operasyonel gerçek:** Google'ın KENDİ giriş ekranındaki Enterprise + data-s captcha'sı (tıklayınca resim bulmacasına çıkar) 2captcha tarafından güvenilir çözülemez ("unable to solve after 3 attempts") ve token gelse bile Google sunucu tarafında session/cihaz/risk doğrulamasıyla reddedebilir. Bu, Google login'ine özgü bir kısıttır, kod hatası değildir (aynı kod 2captcha v2 demo'sunda geçer). Prod stratejisi captcha'yı çözmek değil, **temiz residential/mobil proxy + temiz/ısınmış hesap** ile captcha'nın hiç çıkmamasını sağlamaktır; captcha çıkan hesap "yanmış" sayılıp rotate edilmelidir.
+- **Operasyonel gerçek (bu oturumda KANITLANDI):** Google'ın KENDİ giriş ekranındaki Enterprise captcha'sı token-injection ile **aşılamaz.** 2captcha token'ı çözüp döndürse bile (`captcha_solved` → `injectedInto:1, getResponseOverridden:true, callbackInvoked:true`, `tokenBound: getResponseLen=2446`), Next'e basıldığında Google captcha'yı **tutar** (`recaptcha_still_present_after_solve`, `urlChanged:false`). Token GEÇERLİDİR (aynı token 2captcha demo enterprise sayfasında geçer) — Google **server-side** "bu token bir captcha-farm'ı tarafından, bu oturumdaki gerçek kullanıcı değil çözdü" diye reddeder. Bu solver-bağımsızdır (2captcha API, extension ve CapSolver de aynı duvara çarpar; extension reCAPTCHA'da yine token-injection yapar, "in-context" çözmez). **Hiçbir token-tabanlı çözüm Google signin'ini geçemez.**
+- **Tek gerçek yollar:** (1) **görünür mod + insan** captcha/gesture/telefonu elle çözer (farm değil → Google kabul eder); (2) captcha'yı **hiç çıkartmama** — temiz/dedicated IP + ısınmış/yaşlandırılmış/telefon-doğrulanmış hesap. Captcha çıkan hesap pratikte "yanmış"tır; telefon (SMS) duvarı çıkan hesap hesap-seviyesinde yanmıştır (IP rotasyonu kurtarmaz).
+- Captcha çıkmasını AZALTAN önlemler (kanıt: bunlar gerekli ama tek başına yetmez): hesap-başına kalıcı profil (`storage/profiles/<id>`, cihaz tutarlılığı), sabit fingerprint, güçlü insan-davranışı (eğri mouse, typo, hover-click), gerçek-gezinme warmup (arama→sonuç tıklama→site gezme), yavaş + düşük hacim. Bunlar **temiz hesaplarda zamanla güven inşa eder**, yanmış toplu batch'i kurtarmaz.
 
 ## 2FA (TOTP) Kuralları
 
@@ -148,9 +162,16 @@ Google Auth ile ilgili önemli log event'leri:
 - "Wrong code"/"Yanlış kod" tespit edilirse (`detectWrongTotpCode`) input temizlenip taze pencere-güvenli kodla en fazla 3 deneme yapılır.
 - Her adım loglanır: `2fa_challenge_detected`, `2fa_window_wait`, `2fa_code_generated` (kod maskeli + kalan saniye), `2fa_code_filled`, `2fa_submitted`, `2fa_result` (stillOn2fa/wrongCode).
 
-## Proxy ile Giriş Kuralları
+## Proxy, IP Rotasyon ve Profiling Kuralları
 
-- `generateGoogleAuthCookies` `proxyUrl` alır ve `app/Automation/cloakBrowserClient.js` üzerinden context'e geçirir; kimlikli proxy'ler `anonymizeProxyIfNeeded` ile sarılır.
+- `generateGoogleAuthCookies` `proxyUrl` alır ve `app/Automation/cloakBrowserClient.js` üzerinden context'e geçirir; kimlikli HTTP proxy'ler `anonymizeProxyIfNeeded` (proxy-chain) ile yerel proxy'ye sarılır.
+- **Chromium kimlikli (user:pass) SOCKS5 proxy'yi DESTEKLEMEZ** (bilinen kısıt). Bu yüzden `socks5://user:pass@...` tünel patlatır; auth'lu proxy'lerde **HTTP** kullanılır. SOCKS5 ancak panel IP whitelist (kimliksiz) ile kullanılabilir.
+- **Proxy provider abstraction** `app/Services/proxyProviderService.js`: bir provider kontratı (`name`, `label`, `manualReset`, `hostPattern`, `resetIp({resetUrl,onEvent,settleMs})`). `buymobileproxy` provider'ı host'tan **otomatik algılanır** (`detectProxyProvider` — host'ta `buymobileproxy` geçerse). Yeni mobil proxy servisi = PROVIDERS'a yeni giriş.
+- **Mobil proxy IP'si login ortasında dönerse Google maksimum bot sinyali alır** (her 30sn rotasyon = email IP-A'dan, şifre IP-B'den → captcha→gesture→telefon). Çözüm: panelde IP yenileme aralığını **Manuel** yap; provider reset link'i (`proxyResetUrl`, UI'da yalnızca buymobileproxy proxy girilince çıkar) ile **hesap başına TEK SEFER taze IP** al, login o sabit IP'de yapılır. Reset sonrası `DEFAULT_SETTLE_MS=12000` bekle (yeni mobil IP otursun).
+- **IP-rotasyon-retry algoritması** `googleAuthService.generateCookies` içinde: `maxAttempts` (default 3) denemelik döngü; her denemede taze IP + baştan login. `classifyLoginFailure` sonucu `retry` (captcha/unsafe/tünel → taze IP'yle tekrar) veya `terminal` (`phone_verification`=yanmış, `2fa_challenge` → retry yok) olarak sınıflar. Reset yoksa `maxAttempts=1`.
+- **Hesap-başına kalıcı profil (browser profiling):** `cloakBrowserClient.launchBrowserContext({ profileKey })` verilirse DAİMA `storage/profiles/<accountId>` izole persistent context kullanır (cookie/history/fingerprint kalıcı = Google için "aynı cihaz"). `generateCookies` `profileKey: account._id` geçirir. Tek paylaşımlı profil cross-contamination yapar; per-account zorunlu. Profil retry döngüsünde tekrar açılır — her deneme context'i `finally`'de kapatır (sıralı kullanım).
+- **İnsan davranışı** (`app/Automation/googleAuthLogin.js`): `humanMouseMove` eğri/çok-noktalı hareket + molalar; `humanHoverClick` öğeye gidip tıklar; `humanType` ~%8 komşu-tuş typo + backspace düzeltme + molalar; `humanScroll` wheel tabanlı çok-tur.
+- **Güçlü warmup** (`warmUpSession`): login'den önce google→1-2 doğal arama→**organik sonuca tıkla→gerçek sitede gez/oku/scroll→geri dön** (`clickOrganicResultAndBrowse`)→youtube. Warmup'ta /sorry captcha çıkarsa 2captcha ile çözülür (`solveGoogleSorryIfPresent` — bu tip token-injection ile geçer ve IP "unusual traffic" bloğunu kaldırır, signin'den farklı). `GAUTH_WARMUP=0` ile kapatılır.
 - Görünür/proxy'li manuel test için `htmls/smoke-google-auth.js` env üzerinden `GAUTH_PROXY` okur (repo'ya secret yazılmaz). Captcha/2FA davranışını incelemek için `htmls/captcha-hunt.js` `ACCOUNTS_FILE` + `GAUTH_PROXY` + `CAPTCHA_DEBUG=1` ile çalışır. Saf entegrasyon kanıtı için `htmls/demo-recaptcha-v2.js` 2captcha v2 demo'su üzerinde "Captcha is passed successfully!" doğrular.
 
 ## Loglama Kuralları

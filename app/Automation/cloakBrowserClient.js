@@ -1,4 +1,14 @@
+const path = require("path");
 const { cloakBrowser } = require("../../config/app");
+
+// Hesap-başına kalıcı profil kökü. Her Gmail hesabı kendi izole profilini (cookie/history/fingerprint)
+// burada tutar → Google için "hep aynı cihaz" = güven. Tek paylaşımlı profil cross-contamination yapar.
+const PROFILES_ROOT = path.join(__dirname, "..", "..", "storage", "profiles");
+
+function profileDirFor(profileKey) {
+  const safe = String(profileKey || "").replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 80);
+  return safe ? path.join(PROFILES_ROOT, safe) : "";
+}
 
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
@@ -122,11 +132,13 @@ async function launchBrowserContext(options) {
   });
   let context;
 
-  if (cloakBrowser.persistentProfile) {
-    context = await launchPersistentContext({
-      ...launchOptions,
-      userDataDir: cloakBrowser.userDataDir
-    });
+  // Hesap-başına profil verildiyse (profileKey) DAİMA o izole kalıcı profili kullan — cihaz tutarlılığı
+  // için en önemli sinyal. Yoksa eski davranış (config'e göre tek profil veya taze context).
+  const perAccountDir = profileDirFor(options.profileKey);
+  if (perAccountDir) {
+    context = await launchPersistentContext({ ...launchOptions, userDataDir: perAccountDir });
+  } else if (cloakBrowser.persistentProfile) {
+    context = await launchPersistentContext({ ...launchOptions, userDataDir: cloakBrowser.userDataDir });
   } else {
     context = await launchContext(launchOptions);
   }

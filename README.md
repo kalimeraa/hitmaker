@@ -122,22 +122,21 @@ Opsiyonel kolonlar:
 - `telefon` veya `phone`
 - `not`, `note` veya `notes`
 
-Import sırasında ayrıca UI'dan `Tek proxy` veya `Proxy listesi` verilebilir. Proxy seçimi önceliği:
-
-1. Dosya içindeki `proxy` kolonu.
-2. UI'daki proxy listesi; hesaplara sırayla dağıtılır.
-3. UI'daki tek proxy.
-4. Boş proxy.
+Google Auth sekmesi **import-odaklıdır**: manuel tek-hesap kayıt formu kaldırıldı, hesaplar yalnızca dosyadan eklenir. UI'da **tek bir "Proxy" alanı** vardır; hem import edilen hesaplara atanır hem çerez üretiminde kullanılır. Proxy önceliği: dosyadaki `proxy` kolonu > UI'daki tek "Proxy" alanı > boş.
 
 `Importtan sonra otomatik üret` açılırsa import edilen hesaplar sırayla cookie üretimine alınır. Kapalıysa sadece DB'ye hesap olarak kaydedilir.
 
 ### Cookie Üretimi
 
-Her hesap satırındaki `Çerez üret` butonu tek hesap için login akışını başlatır. Üretim seçenekleri:
+Her hesap satırındaki `Çerez üret` butonu tek hesap için login akışını başlatır. Seçenekler:
 
-- `Çerez üretim proxy`: O üretim için geçici proxy. Doluysa hesap proxy'sinin önüne geçer.
+- `Proxy`: Üretimde tarayıcının kullandığı proxy (hesabın kayıtlı proxy'sini ezer). Kimlikli SOCKS5 Chromium'da çalışmaz → auth'lu proxy için HTTP kullanın.
+- `Proxy reset link`: Yalnızca proxy `buymobileproxy` içeriyorsa görünür. Her denemeden önce IP yenilenir (panelde IP yenileme aralığını **Manuel** yapın).
+- `Deneme (IP rotasyon)`: 1-5 (default 3). Captcha/tünel çıkarsa taze IP ile kaç kez tekrar denensin.
 - `Ekran`: Desktop veya mobil viewport.
-- `Headless`: Açık ise browser görünmez. Manuel doğrulama gereken durumlarda kapalı kullanılmalıdır.
+- `Headless`: Açık ise browser görünmez. **Captcha çıkan/yanmış hesaplarda KAPALI kullanılmalı** — görünür modda captcha/gesture/telefon elle çözülür, otomasyon temizlenince devam eder.
+
+Login öncesi **ısınma + hesap-başına kalıcı profil** (`storage/profiles/<accountId>`) çalışır: gerçek-gezinme warmup (arama → sonuç tıklama → site gezme → youtube), insan-benzeri mouse/typing, cihaz tutarlılığı için izole profil. IP-rotasyon-retry algoritması her denemede taze IP alır; telefon (SMS) duvarı çıkan hesap "yanmış" işaretlenir.
 
 Başarılı üretimde:
 
@@ -161,14 +160,16 @@ JSON dosya formatı:
 
 ### Captcha Çözümü (2captcha)
 
-Google login akışında reCAPTCHA çıkarsa 2captcha ile otomatik çözülmeye çalışılır.
+Google login akışında reCAPTCHA çıkarsa **sadece headless modda** 2captcha ile çözülmeye çalışılır; **görünür modda kullanıcı elle çözer** (otomasyon captcha temizlenince anında devam eder).
 
-- `2captcha API anahtarı` Google Auth sekmesindeki alandan girilir; env'den okunmaz, request bazlı taşınır. Boşsa otomatik çözüm denenmez.
-- İki katman: saf API entegrasyonu `app/Services/captchaSolverService.js`, browser glue (sitekey okuma + token enjeksiyonu) `app/Automation/recaptchaSolver.js`.
-- Sitekey ve `data-s` (`data-client-signature` / anchor iframe `&s=`) her zaman DOM'dan okunur; enterprise/invisible otomatik algılanır. Challenge sayfası widget'ı geç render edebileceği için sitekey gelene kadar ~25 sn beklenir.
-- Çözülen token `g-recaptcha-response` alanına yazılır (yalnızca `.value`/`.textContent`; Google'ın Trusted Types politikası nedeniyle `innerHTML` kullanılmaz), `grecaptcha.getResponse` override edilir ve reCAPTCHA callback'leri tetiklenir. Uzun enterprise çözümünde sayfa reload yarışına karşı enjeksiyon retry'lıdır; 2captcha'ya giden ağ koparsa süre dolana dek tekrar denenir.
+- `2captcha API anahtarı` Google Auth sekmesindeki alandan girilir; env'den okunmaz, request bazlı taşınır. Boşsa/görünür modda otomatik çözüm denenmez.
+- İki katman: saf API entegrasyonu `app/Services/captchaSolverService.js`, browser glue `app/Automation/recaptchaSolver.js`.
+- `captchaSolverService` **yeni `api.2captcha.com/createTask`/`getTaskResult` API'sini** kullanır (legacy SDK değil). Enterprise: `RecaptchaV2EnterpriseTask` + `enterprisePayload:{ s: dataS }` + `apiDomain:"google.com"`. Token IP'ye bağlı olduğundan bizim proxy'miz + userAgent + cookies de gönderilir (worker aynı exit IP'den çözer).
+- Sitekey ve `data-s` daima DOM'dan okunur; enterprise/invisible otomatik algılanır. Token `g-recaptcha-response`'a yalnızca `.value`/`.textContent` ile yazılır (Trusted Types nedeniyle `innerHTML` yasak), `grecaptcha.getResponse` override edilir, callback'ler tetiklenir.
 
-**Önemli operasyonel not:** 2captcha standart reCAPTCHA v2 sitelerini güvenilir çözer, ancak Google'ın **kendi giriş ekranındaki** Enterprise + data-s captcha'sı (tıklayınca resim bulmacasına dönüşür) çoğu zaman çözülemez (`unable to solve after 3 attempts`) ve token gelse bile Google sunucu tarafında risk/oturum doğrulamasıyla reddedebilir. Bu, Google login'ine özgü bir kısıttır. **Önerilen yaklaşım: captcha'yı çözmeye çalışmak yerine temiz residential/mobil proxy + temiz/ısınmış hesap kullanarak captcha'nın hiç çıkmamasını sağlamak; captcha çıkan hesabı "yanmış" sayıp rotate etmek.**
+**KANITLANMIŞ operasyonel gerçek:** Google'ın **kendi giriş ekranındaki** Enterprise captcha'sı **token-injection ile aşılamaz.** 2captcha token'ı doğru çözüp enjekte etse (`getResponse` token'ı döndürür) ve Next'e basılsa bile Google captcha'yı tutar (`recaptcha_still_present_after_solve`) — token geçerlidir (2captcha demo'sunda geçer) ama Google **server-side** "bunu bir captcha-farm çözdü, gerçek kullanıcı değil" diye reddeder. Bu **solver-bağımsızdır** (2captcha API/extension ve CapSolver aynı duvara çarpar; extension de reCAPTCHA'da token-injection yapar). **Tek gerçek yollar:** (1) görünür mod + insan elle çözer; (2) temiz/dedicated IP + ısınmış/yaşlandırılmış/telefon-doğrulanmış hesap ile captcha'yı hiç çıkartmamak. Captcha çıkan hesap pratikte, telefon (SMS) duvarı çıkan hesap hesap-seviyesinde "yanmış"tır.
+
+Warmup'taki Google Search **/sorry** captcha'sı (signin'den farklı) 2captcha ile token-injection üzerinden çözülebilir ve IP'nin "unusual traffic" bloğunu kaldırır.
 
 ### 2FA (TOTP)
 

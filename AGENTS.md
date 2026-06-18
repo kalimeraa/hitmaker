@@ -105,7 +105,12 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Token enjeksiyonunda `innerHTML` ataması yasaktır (Google signin Trusted Types zorlar); sadece `.value`/`.textContent` kullanılır, ardından `getResponse` override edilir ve tüm reCAPTCHA `callback`'leri tetiklenir. Uzun enterprise çözümünde sayfa reload yarışına karşı enjeksiyon retry'lı olmalıdır.
 - TOTP (2FA) kodu pencere-güvenli üretilmelidir: 30 sn pencere sınırında bayatlamayı önlemek için input görünür olduktan sonra üretilir, az süre kaldıysa sonraki pencereye geçilir, "Wrong code" tespit edilirse taze kodla retry edilir.
 - Captcha ve 2FA akışının tüm adımları event olarak loglanmalı; gerçek sorun loglardan teşhis edilebilmelidir.
-- Google'ın kendi giriş captcha'sı (Enterprise + data-s + resim bulmaca) token-enjeksiyonu için güvenilmez kabul edilir; prod yaklaşımı temiz proxy + temiz hesapla captcha'yı hiç tetiklememektir.
+- `captchaSolverService` yeni `api.2captcha.com/createTask` API'sini kullanır (legacy SDK değil): enterprise için `RecaptchaV2EnterpriseTask` + `enterprisePayload:{s}` + `apiDomain` + IP-eşleşmeli proxy/userAgent/cookies.
+- **Kanıtlanmış kısıt:** Google'ın KENDİ signin enterprise captcha'sı token-injection ile geçilemez — token çözülüp doğru enjekte edilse (`getResponseLen>0`) ve Next'e basılsa bile Google server-side reddeder (`recaptcha_still_present`). Solver-bağımsız (2captcha/CapSolver/extension hepsi aynı duvar; extension reCAPTCHA'da yine token-injection yapar). Tek yol: görünür mod + insan, veya captcha'yı hiç çıkartmayacak temiz hesap/IP.
+- **2captcha sadece headless'ta çağrılır; görünür modda insan elle çözer** (`waitForManualRecaptchaIfNeeded` captcha temizlenince anında devam eder).
+- **IP-rotasyon-retry:** `generateCookies` `maxAttempts` döngüsüyle her denemede taze IP (provider reset) alır; `classifyLoginFailure` retry/terminal kararı verir. Provider abstraction `app/Services/proxyProviderService.js` (buymobileproxy host'tan auto-detect, manuel reset link). Kimlikli SOCKS5 Chromium'da çalışmaz → HTTP kullanılır.
+- **Hesap-başına kalıcı profil (browser profiling):** `launchBrowserContext({profileKey})` → `storage/profiles/<accountId>` (cihaz tutarlılığı). İnsan davranışı (eğri mouse, typo, hover-click) + gerçek-gezinme warmup (sonuç tıklama/site gezme) güçlendirildi.
+- Hesap modelinde `lastChallenge` (phone_verification|recaptcha_challenge|2fa_challenge|unsafe_browser) → UI'da "yanmış" rozeti. Telefon (SMS) duvarı = hesap-seviyesinde yanmış. Google Auth UI import-odaklı: manuel kayıt formu kaldırıldı, tek "Proxy" alanı.
 
 ## Google Search URL Kuralları
 
