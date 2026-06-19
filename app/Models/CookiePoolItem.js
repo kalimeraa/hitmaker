@@ -18,6 +18,10 @@ const cookiePoolItemSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     notes: String,
+    sourceType: String,
+    sourceAccountId: String,
+    profileKey: String,
+    sourceProxyHost: String,
     cookies: [cookieSchema],
     status: {
       type: String,

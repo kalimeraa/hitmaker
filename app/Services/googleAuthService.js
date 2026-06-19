@@ -32,6 +32,15 @@ function safeFilePart(value) {
     .slice(0, 80) || "google-account";
 }
 
+function proxyHost(proxyUrl) {
+  if (!proxyUrl) return "";
+  try {
+    return new URL(proxyUrl).host;
+  } catch (error) {
+    return "";
+  }
+}
+
 function cookieFileNameFor(account, generatedAt = new Date()) {
   const timestamp = generatedAt.toISOString().replace(/[:.]/g, "-");
   return `${timestamp}-${safeFilePart(account.email)}.json`;
@@ -393,6 +402,10 @@ class GoogleAuthService {
     const cookie = await this.cookieRepository.create({
       name: `google-auth:${account.email}:${new Date().toISOString()}`,
       notes: options.notes || `Google auth cookies generated from ${account.email}`,
+      sourceType: "google_auth",
+      sourceAccountId: String(account._id),
+      profileKey: String(account._id),
+      sourceProxyHost: proxyHost(effectiveProxyUrl),
       cookies: result.cookies,
       status: "active"
     });

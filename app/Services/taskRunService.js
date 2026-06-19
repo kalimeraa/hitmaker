@@ -52,12 +52,15 @@ function selectCookieSetFromList(cookieSets, runIndex, attemptsBeforeRun = 0) {
   if (!cookieSets.length) return null;
   const cookieSetIndex = (Number(runIndex) + Number(attemptsBeforeRun || 0)) % cookieSets.length;
   const cookieSet = cookieSets[cookieSetIndex];
+  const profileKey = cookieSet.profileKey || cookieSet.sourceAccountId || "";
   return {
     cookies: cookieSet.cookies || [],
     cookieSetName: cookieSet.name || `cookie-set-${cookieSetIndex + 1}`,
     cookieSetIndex,
     cookieSetCount: cookieSets.length,
-    cookiePoolId: cookieSet._id ? String(cookieSet._id) : ""
+    cookiePoolId: cookieSet._id ? String(cookieSet._id) : "",
+    profileKey: profileKey ? String(profileKey) : "",
+    sourceProxyHost: cookieSet.sourceProxyHost || ""
   };
 }
 
@@ -77,7 +80,9 @@ async function selectRunCookies(task, runIndex, attemptsBeforeRun = 0) {
     cookieSetName: "",
     cookieSetIndex: null,
     cookieSetCount: 0,
-    cookiePoolId: ""
+    cookiePoolId: "",
+    profileKey: "",
+    sourceProxyHost: ""
   };
 }
 
@@ -129,6 +134,7 @@ class TaskRunService {
       const attemptNumber = attemptsBeforeRun + 1;
       const selectedCookies = await selectRunCookies(latestTask, index, attemptsBeforeRun);
       const proxyHost = runProxyHost(latestTask.proxyUrl);
+      const cookieSourceProxyHost = selectedCookies.sourceProxyHost || "";
 
       await this.repository.startRunAttempt(task._id, index);
       await this.repository.updateRun(task._id, index, {
@@ -136,6 +142,8 @@ class TaskRunService {
         cookieSetIndex: selectedCookies.cookieSetIndex,
         cookieSetCount: selectedCookies.cookieSetCount,
         cookiePoolId: selectedCookies.cookiePoolId,
+        browserProfileKey: selectedCookies.profileKey,
+        cookieSourceProxyHost,
         proxyHost,
         proxyExitIp: "",
         proxyExitIpError: ""
@@ -147,8 +155,18 @@ class TaskRunService {
         cookieSetName: selectedCookies.cookieSetName,
         cookieSetIndex: selectedCookies.cookieSetIndex,
         cookieSetCount: selectedCookies.cookieSetCount,
-        cookiePoolId: selectedCookies.cookiePoolId
+        cookiePoolId: selectedCookies.cookiePoolId,
+        browserProfileKey: selectedCookies.profileKey,
+        cookieSourceProxyHost
       });
+
+      if (cookieSourceProxyHost && proxyHost && cookieSourceProxyHost !== proxyHost) {
+        logAutomationEvent("task_run_cookie_proxy_mismatch", {
+          cookieSourceProxyHost,
+          taskProxyHost: proxyHost,
+          cookiePoolId: selectedCookies.cookiePoolId
+        });
+      }
 
       try {
         const result = await withTimeout(this.browserAutomation({
@@ -159,6 +177,7 @@ class TaskRunService {
           proxyUrl: task.proxyUrl,
           captchaApiKey: task.captchaApiKey || "",
           cookies: selectedCookies.cookies,
+          profileKey: selectedCookies.profileKey,
           onEvent: async (event, meta = {}) => {
             logAutomationEvent(event, meta);
             if (event === "google_search_navigation_started") {

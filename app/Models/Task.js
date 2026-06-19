@@ -33,6 +33,8 @@ const runSchema = new mongoose.Schema(
     cookieSetIndex: Number,
     cookieSetCount: Number,
     cookiePoolId: String,
+    browserProfileKey: String,
+    cookieSourceProxyHost: String,
     proxyHost: String,
     proxyExitIp: String,
     proxyExitIpError: String,

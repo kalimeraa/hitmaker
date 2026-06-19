@@ -156,9 +156,9 @@ async function logProxyExitIp(page, proxyUrl, onEvent, shouldCancel) {
   }
 }
 
-async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, captchaApiKey = "", cookies, onEvent = noop, shouldCancel = neverCancelled }) {
+async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMode = "desktop", proxyUrl, captchaApiKey = "", cookies, profileKey = "", onEvent = noop, shouldCancel = neverCancelled }) {
   const target = normalizeTarget(targetAddress);
-  const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
+  const context = await launchBrowserContext({ headless, deviceMode, proxyUrl, profileKey });
 
   try {
     const page = await context.newPage();
@@ -166,7 +166,7 @@ async function runGoogleSearchClick({ keyword, targetAddress, headless, deviceMo
     page.setDefaultNavigationTimeout(taskTimeoutMs);
 
     const searchUrl = buildGoogleSearchUrl(keyword);
-    await onEvent("browser_context_started", { keyword, targetAddress, target, deviceMode, hasProxy: Boolean(proxyUrl), proxyHost: proxyHost(proxyUrl) });
+    await onEvent("browser_context_started", { keyword, targetAddress, target, deviceMode, hasProxy: Boolean(proxyUrl), proxyHost: proxyHost(proxyUrl), hasProfile: Boolean(profileKey) });
     await logProxyExitIp(page, proxyUrl, onEvent, shouldCancel);
     await applyCookies(context, cookies, target.host);
     if ((cookies || []).length) {
