@@ -348,7 +348,10 @@ async function solveRecaptchaOnPage(page, { apiKey, onEvent = async () => {}, de
     proxy: solverProxy ? solverProxy.proxy : "",
     proxytype: solverProxy ? solverProxy.proxytype : "",
     userAgent,
-    cookies
+    cookies,
+    onProgress: async (event, meta = {}) => {
+      await onEvent(`google_auth_${event}`, meta);
+    }
   });
 
   if (!solve.success) {

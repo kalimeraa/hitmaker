@@ -44,7 +44,8 @@ async function solveRecaptcha({
   proxytype = "",
   userAgent = "",
   cookies = "",
-  timeoutMs = DEFAULT_SOLVE_TIMEOUT_MS
+  timeoutMs = DEFAULT_SOLVE_TIMEOUT_MS,
+  onProgress = async () => {}
 } = {}) {
   const solver = getSolver(apiKey);
   if (!solver) {
@@ -89,7 +90,15 @@ async function solveRecaptcha({
   // 2captcha'ya giden ağ geçici koparsa (DNS/bağlantı) anında pes etme; süre dolana dek tekrar dene.
   while (Date.now() < deadline) {
     try {
-      const result = await runCaptchaTask(apiKey, task, deadline);
+      await onProgress("captcha_solver_create_task_started", {
+        taskType: task.type,
+        websiteURL: task.websiteURL,
+        hasEnterprisePayload: Boolean(task.enterprisePayload),
+        hasProxy: Boolean(solverProxy),
+        hasUserAgent: Boolean(task.userAgent),
+        hasCookies: Boolean(task.cookies)
+      });
+      const result = await runCaptchaTask(apiKey, task, deadline, onProgress);
       if (result.success) {
         return result;
       }
@@ -150,30 +159,44 @@ async function postJson(url, body) {
 }
 
 // createTask -> getTaskResult polling. Returns { success, token, captchaId } | { success:false, error }.
-async function runCaptchaTask(apiKey, task, deadline) {
+async function runCaptchaTask(apiKey, task, deadline, onProgress = async () => {}) {
   const created = await postJson(CREATE_TASK_URL, { clientKey: apiKey, task });
   if (created.errorId) {
+    await onProgress("captcha_solver_create_task_failed", {
+      error: created.errorCode || created.errorDescription || "create_task_failed"
+    });
     return { success: false, error: created.errorCode || created.errorDescription || "create_task_failed" };
   }
   const taskId = created.taskId;
   if (!taskId) {
+    await onProgress("captcha_solver_create_task_failed", { error: "create_task_no_id" });
     return { success: false, error: "create_task_no_id" };
   }
+  await onProgress("captcha_solver_task_created", { captchaId: String(taskId) });
 
   while (Date.now() < deadline) {
     await sleep(POLLING_INTERVAL_MS);
+    await onProgress("captcha_solver_poll_started", { captchaId: String(taskId) });
     const result = await postJson(GET_TASK_RESULT_URL, { clientKey: apiKey, taskId });
     if (result.errorId) {
+      await onProgress("captcha_solver_poll_failed", {
+        captchaId: String(taskId),
+        error: result.errorCode || result.errorDescription || "get_task_result_failed"
+      });
       return { success: false, error: result.errorCode || result.errorDescription || "get_task_result_failed" };
     }
+    await onProgress("captcha_solver_poll_result", { captchaId: String(taskId), status: result.status || "" });
     if (result.status === "ready") {
       const token = result.solution && (result.solution.gRecaptchaResponse || result.solution.token);
       if (!token) {
+        await onProgress("captcha_solver_token_missing", { captchaId: String(taskId) });
         return { success: false, error: "captcha_token_empty" };
       }
+      await onProgress("captcha_solver_token_received", { captchaId: String(taskId), tokenLength: token.length });
       return { success: true, token, captchaId: String(taskId) };
     }
   }
+  await onProgress("captcha_solver_timeout", { captchaId: String(taskId) });
   return { success: false, error: "captcha_solve_timeout" };
 }
 

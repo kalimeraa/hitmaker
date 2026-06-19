@@ -338,6 +338,58 @@ async function clickNext(page, preferredSelector = "") {
   return { clicked: false, via: "enter-fallback" };
 }
 
+async function submitRecaptchaForm(page) {
+  return page.evaluate(() => {
+    const textarea = document.querySelector('textarea#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
+    const form = textarea
+      ? textarea.closest("form")
+      : Array.from(document.forms).find((candidate) => candidate.querySelector('textarea[name="g-recaptcha-response"]'));
+
+    if (!form) {
+      return { submitted: false, via: "no-form" };
+    }
+
+    const tokenLength = textarea ? (textarea.value || "").length : 0;
+    if (!tokenLength) {
+      return { submitted: false, via: "token-empty", tokenLength };
+    }
+
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const submitter = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (typeof form.requestSubmit === "function") {
+      if (submitter) {
+        form.requestSubmit(submitter);
+      } else {
+        form.requestSubmit();
+      }
+      return {
+        submitted: true,
+        via: submitter ? "form.requestSubmit(submitter)" : "form.requestSubmit()",
+        tokenLength,
+        action: form.getAttribute("action") || "",
+        method: form.getAttribute("method") || ""
+      };
+    }
+
+    const submitEvent = new Event("submit", { bubbles: true, cancelable: true });
+    const notCancelled = form.dispatchEvent(submitEvent);
+    if (notCancelled && typeof form.submit === "function") {
+      form.submit();
+      return {
+        submitted: true,
+        via: "form.submit()",
+        tokenLength,
+        action: form.getAttribute("action") || "",
+        method: form.getAttribute("method") || ""
+      };
+    }
+
+    return { submitted: false, via: "submit-event-cancelled", tokenLength };
+  }).catch((error) => ({ submitted: false, via: "error", error: error.message }));
+}
+
 async function dismissOptionalPrompts(page) {
   const buttons = [
     /Şimdi değil|Not now/i,
@@ -476,24 +528,25 @@ async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent, pr
   // Invisible reCAPTCHA auto-submits via callback; checkbox variants need the Next button. Give the
   // widget a moment to bind the injected token into the form (checkbox turns green) before submit.
   await randomDelay(1200, 2000);
-  const tokenBound = await page.evaluate(() => {
-    const ta = document.querySelector('textarea#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
-    let getResponseLen = 0;
-    try { getResponseLen = (window.grecaptcha && window.grecaptcha.getResponse && window.grecaptcha.getResponse() || "").length; } catch (e) {}
-    return { textareaLen: ta ? (ta.value || "").length : 0, getResponseLen };
-  }).catch(() => ({ textareaLen: 0, getResponseLen: 0 }));
+  const tokenBound = await readRecaptchaTokenBinding(page);
   await onEvent("google_auth_captcha_submit_started", { email, url: urlBeforeSolve, tokenBound });
 
-  let nextResult = { clicked: false, via: "skipped" };
-  if (await detectRecaptchaChallenge(page)) {
-    nextResult = await clickNext(page).catch((error) => ({ clicked: false, via: "error", error: error.message }));
-  }
-  await onEvent("google_auth_captcha_next_clicked", { email, ...nextResult });
+  const formSubmitResult = await submitRecaptchaForm(page);
+  await onEvent("google_auth_captcha_form_submit", { email, ...formSubmitResult });
   await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
   await randomDelay(1500, 2600);
 
+  let stillBlocked = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
+  let nextResult = { clicked: false, via: "skipped_after_form_submit" };
+  if (stillBlocked) {
+    nextResult = await clickNext(page).catch((error) => ({ clicked: false, via: "error", error: error.message }));
+    await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+    await randomDelay(1500, 2600);
+    stillBlocked = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
+  }
+  await onEvent("google_auth_captcha_next_clicked", { email, ...nextResult });
+
   const urlAfterSubmit = page.isClosed() ? "" : page.url();
-  const stillBlocked = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
   await onEvent("google_auth_captcha_submit_result", {
     email,
     urlBefore: urlBeforeSolve,
@@ -508,6 +561,21 @@ async function attemptAutomatedRecaptcha(page, email, captchaApiKey, onEvent, pr
   }
 
   return { solved: false, attempted: true, error: "recaptcha_still_present_after_solve" };
+}
+
+async function readRecaptchaTokenBinding(page) {
+  return page.evaluate(() => {
+    const ta = document.querySelector('textarea#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
+    let getResponseLen = 0;
+    try {
+      getResponseLen = (window.grecaptcha && window.grecaptcha.getResponse && window.grecaptcha.getResponse() || "").length;
+    } catch (e) {}
+    return { textareaLen: ta ? (ta.value || "").length : 0, getResponseLen };
+  }).catch(() => ({ textareaLen: 0, getResponseLen: 0 }));
+}
+
+function hasRecaptchaToken(tokenBound = {}) {
+  return Number(tokenBound.textareaLen || 0) > 0 || Number(tokenBound.getResponseLen || 0) > 0;
 }
 
 async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiKey, onEvent, timeout = 180000, proxyUrl = "") {
@@ -565,6 +633,39 @@ async function waitForManualRecaptchaIfNeeded(page, headless, email, captchaApiK
         failureReason: "recaptcha_challenge",
         url: challenge.url
       };
+    }
+
+    const tokenBound = await readRecaptchaTokenBinding(page);
+    if (hasRecaptchaToken(tokenBound)) {
+      await onEvent("google_auth_recaptcha_manual_token_detected", { email, url: page.url(), tokenBound });
+      const formSubmitResult = await submitRecaptchaForm(page);
+      await onEvent("google_auth_captcha_form_submit", { email, ...formSubmitResult, viaManual: true });
+      await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+      await randomDelay(1500, 2600);
+
+      let stillBlockedAfterSubmit = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
+      let nextResult = { clicked: false, via: "skipped_after_form_submit" };
+      if (stillBlockedAfterSubmit) {
+        nextResult = await clickNext(page).catch((error) => ({ clicked: false, via: "error", error: error.message }));
+        await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+        await randomDelay(1500, 2600);
+        stillBlockedAfterSubmit = !page.isClosed() && Boolean(await detectRecaptchaChallenge(page));
+      }
+      await onEvent("google_auth_captcha_next_clicked", { email, ...nextResult, viaManual: true });
+
+      await onEvent("google_auth_captcha_submit_result", {
+        email,
+        urlBefore: challenge.url,
+        urlAfter: page.isClosed() ? "" : page.url(),
+        urlChanged: !page.isClosed() && page.url() !== challenge.url,
+        stillBlocked: stillBlockedAfterSubmit,
+        via: "manual"
+      });
+
+      if (page.isClosed() || !stillBlockedAfterSubmit) {
+        await onEvent("google_auth_recaptcha_completed", { email, url: page.isClosed() ? "" : page.url(), via: "manual" });
+        return { success: true, handled: true };
+      }
     }
 
     const stillBlocked = await detectRecaptchaChallenge(page);
