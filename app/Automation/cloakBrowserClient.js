@@ -12,7 +12,7 @@ function profileDirFor(profileKey) {
 
 const DEFAULT_VIEWPORT = { width: 800, height: 600 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
-const MOBILE_USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36";
+const MOBILE_USER_AGENT = "";
 
 // Tüm CloakBrowser açılışları İstanbul/Türkiye kimliğiyle başlar; konum her açılışta random setlenir.
 const ISTANBUL_TIMEZONE = "Europe/Istanbul";
@@ -76,6 +76,7 @@ async function anonymizeProxyIfNeeded(proxyUrl) {
 
 function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyGeoip = true }) {
   const isMobile = deviceMode === "mobile";
+  const shouldUseProxyGeoip = Boolean(proxyUrl && proxyGeoip && cloakBrowser.geoip);
   const platformArgs = process.platform === "linux" ? DEFAULT_CHROMIUM_ARGS : [];
   const args = isMobile
     ? [...platformArgs, `--window-size=${MOBILE_VIEWPORT.width},${MOBILE_VIEWPORT.height}`]
@@ -87,17 +88,25 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyG
     viewport: isMobile ? MOBILE_VIEWPORT : (headless ? DEFAULT_VIEWPORT : null)
   };
 
-  // İstanbul (GMT+3) kimliği: explicit locale/timezone geoip'i ezer, konum her açılışta random.
-  launchOptions.locale = cloakBrowser.locale || ISTANBUL_LOCALE;
-  launchOptions.timezone = cloakBrowser.timezone || ISTANBUL_TIMEZONE;
+  // Explicit locale/timezone override CloakBrowser geoip. Keep the default TR identity only when
+  // there is no proxy geoip to match; otherwise proxy IP and browser signals would conflict.
+  if (cloakBrowser.locale || !shouldUseProxyGeoip) {
+    launchOptions.locale = cloakBrowser.locale || ISTANBUL_LOCALE;
+  }
+  if (cloakBrowser.timezone || !shouldUseProxyGeoip) {
+    launchOptions.timezone = cloakBrowser.timezone || ISTANBUL_TIMEZONE;
+  }
 
-  const contextOptions = {
-    geolocation: randomIstanbulGeolocation(),
-    permissions: ["geolocation"]
-  };
+  const contextOptions = {};
+  if (!shouldUseProxyGeoip) {
+    contextOptions.geolocation = randomIstanbulGeolocation();
+    contextOptions.permissions = ["geolocation"];
+  }
 
   if (isMobile) {
-    launchOptions.userAgent = MOBILE_USER_AGENT;
+    if (MOBILE_USER_AGENT) {
+      launchOptions.userAgent = MOBILE_USER_AGENT;
+    }
     Object.assign(contextOptions, {
       isMobile: true,
       hasTouch: true,
@@ -110,7 +119,7 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyG
 
   if (proxyUrl) {
     launchOptions.proxy = proxyUrl;
-    launchOptions.geoip = proxyGeoip && cloakBrowser.geoip;
+    launchOptions.geoip = shouldUseProxyGeoip;
   }
   if (cloakBrowser.humanPreset && cloakBrowser.humanPreset !== "default") {
     launchOptions.humanPreset = cloakBrowser.humanPreset;
