@@ -1,11 +1,32 @@
 const FIRST_NAMES = [
-  "Ahmet", "Mehmet", "Ayse", "Fatma", "Emre", "Deniz", "Selin", "Burak", "Elif", "Can",
-  "John", "Emma", "Liam", "Olivia", "Noah", "Sophia", "James", "Mia", "Lucas", "Ella"
+  "Ahmet", "Mehmet", "Mustafa", "Ali", "Huseyin", "Hasan", "Murat", "Emre", "Burak", "Can",
+  "Kaan", "Onur", "Kerem", "Yusuf", "Omer", "Deniz", "Eren", "Berk", "Baris", "Serkan",
+  "Furkan", "Enes", "Muhammed", "Ibrahim", "Ismail", "Mert", "Alperen", "Tolga", "Umut", "Cem",
+  "Cemal", "Cihan", "Volkan", "Koray", "Cagatay", "Taha", "Arda", "Oguz", "Oguzhan", "Ugur",
+  "Halil", "Kadir", "Sinan", "Levent", "Tayfun", "Erkan", "Erdem", "Ersin", "Bora", "Alp",
+  "Alper", "Bulent", "Hakan", "Metin", "Selcuk", "Orhan", "Kemal", "Cenk", "Yigit", "Sercan",
+  "Gokhan", "Ilker", "Mete", "Mertcan", "Batuhan", "Bartu", "Doruk", "Atakan", "Yasin", "Adem",
+  "Ayse", "Fatma", "Elif", "Zeynep", "Merve", "Selin", "Derya", "Ece", "Buse", "Gizem",
+  "Esra", "Ceren", "Seda", "Melis", "Irem", "Sibel", "Aylin", "Asli", "Yasemin", "Damla",
+  "Hatice", "Emine", "Havva", "Sultan", "Esma", "Rabia", "Kubra", "Nisa", "Nazli", "Eylul",
+  "Dila", "Dilan", "Dilara", "Berfin", "Beyza", "Busra", "Gamze", "Gul", "Gulcan", "Gulsum",
+  "Sevgi", "Sevda", "Melek", "Mina", "Nehir", "Nisan", "Derin", "Ilayda", "Alara", "Ela",
+  "Defne", "Azra", "Sude", "Beste", "Tugce", "Burcu", "Pelin", "Pinar", "Sevil", "Nur",
+  "Nurgul", "Nuray", "Neslihan", "Ebru", "Muge", "Hande", "Bahar", "Cigdem", "Ozge", "Cansu"
 ];
 
 const LAST_NAMES = [
   "Yilmaz", "Kaya", "Demir", "Celik", "Sahin", "Ozturk", "Arslan", "Dogan", "Aydin", "Koc",
-  "Smith", "Johnson", "Brown", "Taylor", "Wilson", "Miller", "Davis", "Moore", "Clark", "Lee"
+  "Ozdemir", "Polat", "Kilic", "Aslan", "Turan", "Yildiz", "Yalcin", "Acar", "Bulut", "Kaplan",
+  "Erdogan", "Korkmaz", "Keskin", "Avci", "Tas", "Gunes", "Bozkurt", "Uysal", "Kurt", "Simsek",
+  "Cetin", "Aksoy", "Tekin", "Karaca", "Yavuz", "Guler", "Eren", "Sari", "Kara", "Akbas",
+  "Akkaya", "Akgun", "Aksu", "Alkan", "Altun", "Ates", "Ay", "Ayhan", "Balci", "Basaran",
+  "Baskan", "Bayrak", "Bayraktar", "Baysal", "Bilgin", "Can", "Canpolat", "Cavus", "Coban", "Cakmak",
+  "Dag", "Demirci", "Dincer", "Durmaz", "Dursun", "Ekici", "Er", "Ergin", "Eroglu", "Genc",
+  "Gok", "Gokce", "Gungor", "Gurbuz", "Guzel", "Isik", "Kalkan", "Karaaslan", "Karadag", "Karahan",
+  "Karatas", "Kayaalp", "Kocak", "Kose", "Kucuk", "Mert", "Mutlu", "Ocal", "Onal", "Orhan",
+  "Ozcan", "Ozkan", "Ozer", "Pek", "Savas", "Sezer", "Solmaz", "Sonmez", "Soylu", "Tan",
+  "Topal", "Toprak", "Ucar", "Ulusoy", "Unal", "Uzun", "Yaman", "Yasar", "Yazici", "Yesil"
 ];
 
 function randomItem(list) {

@@ -68,16 +68,72 @@ async function waitForManualProgress(page, onEvent, { hint, detectDone, timeoutM
 }
 
 async function detectPhoneStep(page) {
-  const phone = page.locator("input#phoneNumberId, input[type='tel'], input[name='phoneNumber']").first();
+  const url = page.url();
+  if (/\/signin\/challenge\/iap|\/phone|\/verifyphone/i.test(url)) return true;
+  if (await detectBirthdayStep(page)) return false;
+
+  const phone = page.locator("input#phoneNumberId, input[name='phoneNumber'], input[autocomplete='tel'], input[aria-label*='phone' i], input[aria-label*='telefon' i]").first();
   if (await phone.isVisible({ timeout: 1200 }).catch(() => false)) return true;
 
-  const text = await page.evaluate(() => document.body.innerText).catch(() => "");
-  return /phone number|telefon numarası|get a verification code|doğrulama kodu/i.test(text);
+  const phoneText = page.getByText(/enter a phone number|get a verification code|telefon numarası girin|doğrulama kodu/i).first();
+  return phoneText.isVisible({ timeout: 1200 }).catch(() => false);
 }
 
 async function detectSmsCodeStep(page) {
   const code = page.locator('input[name="code"], input#code, input[autocomplete="one-time-code"]').first();
   return code.isVisible({ timeout: 1200 }).catch(() => false);
+}
+
+async function detectBirthdayStep(page) {
+  if (/\/signup\/birthdaygender/i.test(page.url())) return true;
+
+  const visible = await visibleFirst(page, [
+    "input[name='day']",
+    "input#day",
+    "input[aria-label*='Day']",
+    "input[aria-label*='Gün']"
+  ], 1500);
+  if (visible) return true;
+
+  const heading = page.getByText(/basic information|enter your birthday and gender|doğum tarihinizi ve cinsiyetinizi/i).first();
+  return heading.isVisible({ timeout: 1200 }).catch(() => false);
+}
+
+async function selectByNativeOrKeyboard(page, nativeSelector, labelPattern, optionIndex) {
+  const native = page.locator(nativeSelector).first();
+  if (await native.isVisible({ timeout: 1200 }).catch(() => false)) {
+    await native.selectOption(String(optionIndex)).catch(async () => {
+      await native.selectOption({ index: optionIndex }).catch(() => {});
+    });
+    return true;
+  }
+
+  const combo = page.getByRole("combobox", { name: labelPattern }).first();
+  if (!(await combo.isVisible({ timeout: 1200 }).catch(() => false))) return false;
+
+  await humanHoverClick(page, combo);
+  await randomDelay(150, 350);
+  const listboxId = await combo.getAttribute("aria-controls").catch(() => "");
+  const scopedOption = listboxId
+    ? page.locator(`#${listboxId} [role='option'][data-value='${optionIndex}']`).first()
+    : null;
+  if (scopedOption && await scopedOption.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await humanHoverClick(page, scopedOption);
+    return true;
+  }
+
+  const option = page.locator(`[role='option'][data-value='${optionIndex}']`).first();
+  if (await option.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await humanHoverClick(page, option);
+    return true;
+  }
+
+  for (let index = 0; index < optionIndex; index += 1) {
+    await page.keyboard.press("ArrowDown");
+    await randomDelay(30, 90);
+  }
+  await page.keyboard.press("Enter");
+  return true;
 }
 
 async function fillNameStep(page, identity, onEvent) {
@@ -100,33 +156,31 @@ async function fillNameStep(page, identity, onEvent) {
 }
 
 async function fillBirthdayStep(page, identity, onEvent) {
-  const dayInput = await visibleFirst(page, ["input[name='day']", "input#day"]);
+  const dayInput = await visibleFirst(page, [
+    "input[name='day']",
+    "input#day",
+    "input[aria-label*='Day']",
+    "input[aria-label*='Gün']"
+  ]);
   if (!dayInput) return false;
 
   await onEvent("gmail_creator_birthday_step_started", {});
   const { day, month, year } = identity.birthday;
 
+  await selectByNativeOrKeyboard(page, "select#month, select[name='month']", /month|ay/i, month);
+  await randomDelay(200, 500);
+
+  await humanHoverClick(page, dayInput);
   await humanType(dayInput, String(day));
   await randomDelay(200, 500);
 
-  const monthSelect = page.locator("select#month, select[name='month']").first();
-  if (await monthSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await monthSelect.selectOption(String(month)).catch(async () => {
-      await monthSelect.selectOption({ index: month }).catch(() => {});
-    });
-  }
-
-  const yearInput = page.locator("input[name='year'], input#year").first();
+  const yearInput = page.locator("input[name='year'], input#year, input[aria-label*='Year'], input[aria-label*='Yıl']").first();
   if (await yearInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await humanHoverClick(page, yearInput);
     await humanType(yearInput, String(year));
   }
 
-  const genderSelect = page.locator("select#gender, select[name='gender']").first();
-  if (await genderSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await genderSelect.selectOption("1").catch(async () => {
-      await genderSelect.selectOption({ index: 1 }).catch(() => {});
-    });
-  }
+  await selectByNativeOrKeyboard(page, "select#gender, select[name='gender']", /gender|cinsiyet/i, 1);
 
   await randomDelay(500, 1100);
   await clickNextButton(page);
@@ -224,6 +278,14 @@ async function handleManualBlockers(page, onEvent) {
   return { success: true };
 }
 
+async function waitForManualBirthdayStep(page, onEvent) {
+  await onEvent("gmail_creator_birthday_manual_required", { url: page.url() });
+  return waitForManualProgress(page, onEvent, {
+    hint: "Doğum tarihi ve cinsiyeti tarayıcıda elle seçip Next'e basın.",
+    detectDone: async () => !(await detectBirthdayStep(page))
+  });
+}
+
 async function runSignupWizard(page, identity, onEvent) {
   if (!(await fillNameStep(page, identity, onEvent))) {
     return { success: false, error: "gmail_creator_name_step_missing", failureReason: "signup_step", url: page.url() };
@@ -232,7 +294,12 @@ async function runSignupWizard(page, identity, onEvent) {
   await handleManualBlockers(page, onEvent);
 
   if (!(await fillBirthdayStep(page, identity, onEvent))) {
-    return { success: false, error: "gmail_creator_birthday_step_missing", failureReason: "signup_step", url: page.url() };
+    if (await detectBirthdayStep(page)) {
+      const birthdayDone = await waitForManualBirthdayStep(page, onEvent);
+      if (!birthdayDone.success) return birthdayDone;
+    } else {
+      return { success: false, error: "gmail_creator_birthday_step_missing", failureReason: "signup_step", url: page.url() };
+    }
   }
 
   await handleManualBlockers(page, onEvent);
