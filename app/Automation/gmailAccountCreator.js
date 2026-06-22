@@ -136,6 +136,14 @@ async function selectByNativeOrKeyboard(page, nativeSelector, labelPattern, opti
   return true;
 }
 
+async function clearAndHumanType(locator, value) {
+  await locator.fill("").catch(async () => {
+    await locator.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
+    await locator.press("Backspace").catch(() => {});
+  });
+  await humanType(locator, String(value));
+}
+
 async function fillNameStep(page, identity, onEvent) {
   const first = await visibleFirst(page, ["input[name='firstName']", "input#firstName"]);
   const last = await visibleFirst(page, ["input[name='lastName']", "input#lastName"]);
@@ -171,13 +179,13 @@ async function fillBirthdayStep(page, identity, onEvent) {
   await randomDelay(200, 500);
 
   await humanHoverClick(page, dayInput);
-  await humanType(dayInput, String(day));
+  await clearAndHumanType(dayInput, day);
   await randomDelay(200, 500);
 
   const yearInput = page.locator("input[name='year'], input#year, input[aria-label*='Year'], input[aria-label*='Yıl']").first();
   if (await yearInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await humanHoverClick(page, yearInput);
-    await humanType(yearInput, String(year));
+    await clearAndHumanType(yearInput, year);
   }
 
   await selectByNativeOrKeyboard(page, "select#gender, select[name='gender']", /gender|cinsiyet/i, 1);

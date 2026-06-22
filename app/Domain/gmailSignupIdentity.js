@@ -68,7 +68,7 @@ function generatePassword(length = randomInt(12, 16)) {
   return chars.join("");
 }
 
-function generateBirthday(minYear = 1985, maxYear = 2002) {
+function generateBirthday(minYear = 1970, maxYear = 2000) {
   return {
     day: randomInt(1, 28),
     month: randomInt(1, 12),
