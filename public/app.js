@@ -9,6 +9,7 @@ let allTasks = [];
 let allCookies = [];
 let allGoogleAuthAccounts = [];
 let allGmailCreatorJobs = [];
+let allMrLoginJobs = [];
 let browserCapacity = null;
 const runPages = new Map();
 let pendingTaskLoad = null;
@@ -1064,6 +1065,151 @@ async function deleteGmailCreatorJob(jobId) {
   await loadGmailCreatorJobs();
 }
 
+function renderMrLoginLogs(job) {
+  const logs = (job && job.logs) || [];
+  $("#mrLoginLogs").html(logs.length
+    ? logs.map((log) => {
+      const at = log.at ? new Date(log.at).toLocaleTimeString() : "-";
+      return `
+        <div class="mr-login-log-line">
+          <span>${escapeHtml(at)}</span>
+          <span>${escapeHtml(log.event || "-")}</span>
+          <span>${escapeHtml(log.message || "")}</span>
+        </div>
+      `;
+    }).join("")
+    : '<div class="task-meta text-light">Henüz log yok.</div>');
+
+  const logBox = document.getElementById("mrLoginLogs");
+  if (logBox) logBox.scrollTop = logBox.scrollHeight;
+}
+
+function renderMrLoginResults(job) {
+  if (!job) {
+    $("#mrLoginResults").html("");
+    return;
+  }
+
+  const cookies = job.cookies || [];
+  const localStorage = job.session && job.session.localStorage || [];
+  const sessionStorage = job.session && job.session.sessionStorage || [];
+  const cookieRows = cookies.slice(0, 30).map((cookie) => `
+    <div class="mr-login-token-row">
+      <span class="fw-semibold">${escapeHtml(cookie.name || "-")}</span>
+      <span>${escapeHtml(cookie.domain || "-")}</span>
+      <span>${escapeHtml(cookie.value || "")}</span>
+    </div>
+  `).join("");
+  const storageRows = [...localStorage.map((item) => ({ ...item, scope: "local" })), ...sessionStorage.map((item) => ({ ...item, scope: "session" }))]
+    .slice(0, 30)
+    .map((item) => `
+      <div class="mr-login-token-row">
+        <span class="fw-semibold">${escapeHtml(item.scope)}</span>
+        <span>${escapeHtml(item.key || "-")}</span>
+        <span>${escapeHtml(item.value || "")}</span>
+      </div>
+    `).join("");
+
+  $("#mrLoginResults").html(`
+    <div class="mr-login-result-section">
+      <div class="d-flex justify-content-between gap-2 flex-wrap">
+        <div>
+          <div class="fw-semibold">${escapeHtml(job.email || "")}</div>
+          <div class="task-meta google-auth-file-path">${escapeHtml(job.lastUrl || (job.session && job.session.url) || "-")}</div>
+          ${job.lastError ? `<div class="task-meta text-danger">${escapeHtml(job.lastError)}</div>` : ""}
+        </div>
+        <div>${statusBadge(job.status || "queued")}</div>
+      </div>
+    </div>
+    <div class="mr-login-result-section">
+      <div class="fw-semibold mb-2">Cookies (${cookies.length})</div>
+      <div class="mr-login-token-list">${cookieRows || '<div class="task-meta">Cookie yok.</div>'}</div>
+    </div>
+    <div class="mr-login-result-section">
+      <div class="fw-semibold mb-2">Session / Storage (${localStorage.length + sessionStorage.length})</div>
+      <div class="mr-login-token-list">${storageRows || '<div class="task-meta">Storage kaydı yok.</div>'}</div>
+    </div>
+  `);
+}
+
+function renderMrLoginJobs() {
+  const latest = allMrLoginJobs[0];
+  if (!latest) {
+    $("#mrLoginJobSummary").text("Henüz job yok.");
+    renderMrLoginLogs(null);
+    renderMrLoginResults(null);
+    return;
+  }
+
+  const createdAt = latest.createdAt ? new Date(latest.createdAt).toLocaleString() : "-";
+  $("#mrLoginJobSummary").text(`${latest.status || "queued"} · ${createdAt}`);
+  renderMrLoginLogs(latest);
+  renderMrLoginResults(latest);
+}
+
+async function loadMrLoginJobs() {
+  allMrLoginJobs = await $.getJSON("/api/mr-giris");
+  renderMrLoginJobs();
+}
+
+async function launchMrLogin() {
+  const $button = $("#mrLoginLaunchBtn");
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Kuyruğa alınıyor...");
+
+  try {
+    await $.ajax({
+      method: "POST",
+      url: "/api/mr-giris/launch",
+      contentType: "application/json",
+      data: JSON.stringify({
+        loginUrl: cleanOptionalText($("#mrLoginUrl").val()),
+        email: cleanOptionalText($("#mrLoginEmail").val()),
+        password: cleanOptionalText($("#mrLoginPassword").val())
+      })
+    });
+    await loadMrLoginJobs();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "MR giriş başlatılamadı"));
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
+async function submitMrLoginEmailCode() {
+  const latest = allMrLoginJobs.find((job) => job.status === "running") || allMrLoginJobs[0];
+  if (!latest) {
+    alert("Aktif MR giriş job yok.");
+    return;
+  }
+
+  const code = cleanOptionalText($("#mrLoginEmailCode").val());
+  if (!code) {
+    alert("Email doğrulama kodunu gir.");
+    return;
+  }
+
+  const jobId = String(latest._id || latest.id);
+  const $button = $("#mrLoginEmailCodeBtn");
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Gönderiliyor...");
+
+  try {
+    await $.ajax({
+      method: "POST",
+      url: `/api/mr-giris/${encodeURIComponent(jobId)}/email-code`,
+      contentType: "application/json",
+      data: JSON.stringify({ code })
+    });
+    $("#mrLoginEmailCode").val("");
+    await loadMrLoginJobs();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Email doğrulama kodu gönderilemedi"));
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
 async function checkHealth() {
   try {
     await $.getJSON("/api/health");
@@ -1225,6 +1371,14 @@ $("#gmailCreatorJobs").on("click", "[data-gmail-creator-delete]", function () {
     alert(extractAjaxErrorMessage(error, "Gmail creator job silinemedi"));
   });
 });
+$("#mrLoginForm").on("submit", async function (event) {
+  event.preventDefault();
+  await launchMrLogin();
+});
+$("#mrLoginEmailCodeForm").on("submit", async function (event) {
+  event.preventDefault();
+  await submitMrLoginEmailCode();
+});
 $("#googleAuthImportFile").on("change", function () {
   const file = (this.files || [])[0];
   $("#googleAuthImportFileName").text(file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV");
@@ -1295,7 +1449,7 @@ $(document).on("change", "[data-cookie-file]", function () {
 });
 
 function setStreamState(online) {
-  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState, #googleAuthLiveState, #gmailCreatorLiveState")
+  $("#taskLiveState, #logLiveState, #errorLiveState, #cookieLiveState, #googleAuthLiveState, #gmailCreatorLiveState, #mrLoginLiveState")
     .toggleClass("is-offline", !online)
     .text(online ? "live" : "reconnecting");
 }
@@ -1309,6 +1463,7 @@ events.addEventListener("task.updated", scheduleLoadTasks);
 events.addEventListener("cookie.updated", loadCookies);
 events.addEventListener("googleAuth.updated", loadGoogleAuthAccounts);
 events.addEventListener("gmailCreator.updated", loadGmailCreatorJobs);
+events.addEventListener("mrLogin.updated", loadMrLoginJobs);
 events.addEventListener("task.deleted", (event) => {
   const payload = JSON.parse(event.data);
   allTasks = allTasks.filter((task) => String(task._id) !== String(payload.taskId));
@@ -1371,5 +1526,6 @@ loadTasks();
 loadCookies();
 loadGoogleAuthAccounts();
 loadGmailCreatorJobs();
+loadMrLoginJobs();
 loadLogs();
 loadErrors();

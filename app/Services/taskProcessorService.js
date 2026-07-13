@@ -5,6 +5,7 @@ const { mapWithConcurrency } = require("../Utils/concurrency");
 const { buildQueuedRuns, resolveFinalTaskStatus } = require("../Domain/taskRunPlanner");
 const realtimeEventService = require("./realtimeEventService");
 const taskCancellationService = require("./taskCancellationService");
+const mrLoginService = require("./mrLoginService");
 const { logger } = require("./logService");
 
 class TaskProcessorService {
@@ -15,6 +16,10 @@ class TaskProcessorService {
   }
 
   async process(job) {
+    if (job.name === "mr-login" || job.data.type === "mr-login") {
+      return mrLoginService.runJob(job.data.jobId);
+    }
+
     if (job.name === "retry-run") {
       return this.retryRun(job);
     }

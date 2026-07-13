@@ -18,7 +18,7 @@ async function main() {
 
   worker.on("failed", async (job, error) => {
     logger.error("task_job_failed", { jobId: job && job.id, error: error.message });
-    if (job && job.data.taskId) {
+    if (job && job.data && job.data.taskId) {
       await taskProcessorService.markFailed(job.data.taskId, error.message);
     }
   });

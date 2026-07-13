@@ -254,6 +254,96 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.mr-login-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(220px, 0.8fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.mr-login-code-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.45fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.mr-login-submit .btn {
+  min-height: 48px;
+  font-weight: 700;
+}
+
+.mr-login-status,
+.mr-login-results {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.mr-login-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+}
+
+.mr-login-log-output {
+  min-height: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #111827;
+  color: #e5e7eb;
+  padding: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.mr-login-log-line {
+  display: grid;
+  grid-template-columns: 150px minmax(140px, 0.7fr) minmax(240px, 1fr);
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mr-login-log-line:last-child {
+  border-bottom: 0;
+}
+
+.mr-login-log-line span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mr-login-result-section {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mr-login-result-section:last-child {
+  border-bottom: 0;
+}
+
+.mr-login-token-list {
+  display: grid;
+  gap: 6px;
+}
+
+.mr-login-token-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.5fr) minmax(140px, 0.6fr) minmax(160px, 1fr);
+  gap: 10px;
+  font-size: 0.84rem;
+}
+
+.mr-login-token-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .run-list {
   margin-top: 12px;
   border-top: 1px solid var(--line);
@@ -515,7 +605,11 @@ h2 {
   .google-auth-form,
   .google-auth-import,
   .google-auth-options,
-  .google-auth-row {
+  .google-auth-row,
+  .mr-login-form,
+  .mr-login-code-form,
+  .mr-login-log-line,
+  .mr-login-token-row {
     grid-template-columns: 1fr;
   }
 

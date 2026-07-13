@@ -1,0 +1,46 @@
+<div class="tab-pane fade" id="mrLoginPane">
+  <div class="toolbar">
+    <h2>MR Giriş</h2>
+    <div class="toolbar-actions">
+      <span class="live-indicator" id="mrLoginLiveState">live</span>
+    </div>
+  </div>
+
+  <form id="mrLoginForm" class="mr-login-form" autocomplete="off">
+    <div>
+      <label class="form-label" for="mrLoginUrl">MR Login Adresi</label>
+      <input class="form-control" id="mrLoginUrl" value="https://mrking5018.com/auth/login" autocomplete="off">
+    </div>
+    <div>
+      <label class="form-label" for="mrLoginEmail">Email / Kullanıcı Adı</label>
+      <input class="form-control" id="mrLoginEmail" value="kadanfurkan0@gmail.com" autocomplete="username">
+    </div>
+    <div>
+      <label class="form-label" for="mrLoginPassword">Şifre</label>
+      <input class="form-control" id="mrLoginPassword" type="password" value="ZzWUHW7VYNWp" autocomplete="current-password">
+    </div>
+    <div class="mr-login-submit">
+      <button class="btn btn-success btn-lg w-100" type="submit" id="mrLoginLaunchBtn">Cloak Browser ile Giriş Yap</button>
+    </div>
+  </form>
+
+  <div class="mr-login-status mt-3">
+    <div class="mr-login-status-header">
+      <span>Status Log</span>
+      <span class="task-meta" id="mrLoginJobSummary">Henüz job yok.</span>
+    </div>
+    <div id="mrLoginLogs" class="mr-login-log-output"></div>
+  </div>
+
+  <form id="mrLoginEmailCodeForm" class="mr-login-code-form mt-3" autocomplete="off">
+    <div>
+      <label class="form-label" for="mrLoginEmailCode">Email doğrulama kodu</label>
+      <input class="form-control" id="mrLoginEmailCode" inputmode="numeric" placeholder="E-postanıza gelen kod">
+    </div>
+    <div class="d-flex align-items-end">
+      <button class="btn btn-outline-primary w-100" type="submit" id="mrLoginEmailCodeBtn">Doğrulama Kodunu Gönder</button>
+    </div>
+  </form>
+
+  <div id="mrLoginResults" class="mr-login-results mt-3"></div>
+</div>
