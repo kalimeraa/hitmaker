@@ -2,7 +2,11 @@ const mrLoginJobRepository = require("../Repositories/mrLoginJobRepository");
 const mrLoginJobService = require("./mrLoginJobService");
 const realtimeEventService = require("./realtimeEventService");
 const { logger } = require("./logService");
-const { validateLaunchPayload } = require("../Validators/mrLoginValidator");
+const {
+  validateCredentialPayload,
+  validateLaunchPayload,
+  validateWarmupPayload
+} = require("../Validators/mrLoginValidator");
 const { runMrKingLogin } = require("../Automation/mrKingLogin");
 const { HttpError } = require("../Utils/httpError");
 
@@ -73,12 +77,48 @@ class MrLoginService {
     return publicJob(job);
   }
 
+  async createWarmupJob(options, slotIndex = 1, initialCredentials = null) {
+    const job = await this.repository.create({
+      mode: "warmup",
+      email: initialCredentials ? initialCredentials.email : "",
+      password: initialCredentials ? initialCredentials.password : "",
+      loginUrl: options.loginUrl,
+      proxyUrl: options.proxyUrl,
+      credentialsSubmittedAt: initialCredentials ? new Date() : undefined,
+      profileKey: `mr-warmup-${Date.now()}-${slotIndex}-${Math.random().toString(16).slice(2)}`,
+      slotIndex,
+      status: "queued",
+      logs: [{
+        at: new Date(),
+        event: "mr_login_warmup_queued",
+        message: "MR hazır browser kuyruğa alındı.",
+        meta: { loginUrl: options.loginUrl, slotIndex }
+      }]
+    });
+    await this.jobService.enqueue(job._id, { mode: "warmup" });
+    return job;
+  }
+
+  async warmup(payload) {
+    const options = validateWarmupPayload(payload);
+    const jobs = [];
+
+    for (let index = 0; index < options.browserCount; index += 1) {
+      jobs.push(await this.createWarmupJob(options, index + 1));
+    }
+
+    await realtimeEventService.publish("mrLogin.updated", { action: "warmup_queued" });
+    logger.info("mr_login_warmup_queued", { count: jobs.length, loginUrl: options.loginUrl });
+
+    return jobs.map(publicJob);
+  }
+
   async runJob(jobId) {
     const job = await this.repository.findById(jobId);
     if (!job) throw new HttpError(404, "MR login job not found");
 
     await this.repository.markRunning(jobId);
-    await this.addLog(jobId, "mr_login_started", "MR giriş job başladı.", { email: job.email });
+    await this.addLog(jobId, "mr_login_started", "MR giriş job başladı.", { email: job.email, mode: job.mode });
     await realtimeEventService.publish("mrLogin.updated", { action: "started", jobId: String(jobId) });
 
     const onEvent = async (event, message, meta = {}) => {
@@ -102,6 +142,20 @@ class MrLoginService {
         const fresh = await this.repository.findById(jobId);
         return fresh ? String(fresh.emailAuthCode || "").trim() : "";
       },
+      waitForCredentials: job.mode === "warmup",
+      getCredentials: async () => {
+        const fresh = await this.repository.findById(jobId);
+        if (!fresh || !fresh.credentialsSubmittedAt) return null;
+        return {
+          email: String(fresh.email || "").trim(),
+          password: String(fresh.password || ""),
+          submittedAt: fresh.credentialsSubmittedAt
+        };
+      },
+      markReady: async () => {
+        await this.repository.markReady(jobId);
+        await realtimeEventService.publish("mrLogin.updated", { action: "ready", jobId: String(jobId) });
+      },
       onEvent
     });
 
@@ -111,6 +165,9 @@ class MrLoginService {
         lastUrl: result.url || ""
       });
       await realtimeEventService.publish("mrLogin.updated", { action: "failed", jobId: String(jobId) });
+      if (job.mode === "warmup") {
+        await this.replenishWarmup(job);
+      }
       throw new HttpError(400, result.error || "MR login failed");
     }
 
@@ -121,7 +178,24 @@ class MrLoginService {
       lastUrl: result.url || ""
     });
     await realtimeEventService.publish("mrLogin.updated", { action: "completed", jobId: String(jobId) });
+    if (job.mode === "warmup") {
+      await this.replenishWarmup(job);
+    }
     return publicJob(completed);
+  }
+
+  async replenishWarmup(job) {
+    const replacement = await this.createWarmupJob({
+      loginUrl: job.loginUrl,
+      proxyUrl: job.proxyUrl || ""
+    }, job.slotIndex || 1);
+    await this.addLog(replacement._id, "mr_login_warmup_replenished", "Kullanılan MR browser yerine yeni hazır browser açılıyor.", {
+      previousJobId: String(job._id)
+    });
+    await realtimeEventService.publish("mrLogin.updated", {
+      action: "warmup_replenished",
+      jobId: String(replacement._id)
+    });
   }
 
   async addLog(jobId, event, message, meta = {}) {
@@ -143,6 +217,35 @@ class MrLoginService {
       jobId: String(jobId)
     });
     return publicJob(job);
+  }
+
+  async submitCredentials(payload = {}) {
+    const credentials = validateCredentialPayload(payload);
+    const options = validateWarmupPayload(payload);
+    const readyJobs = await this.repository.findRecent(50);
+    const job = readyJobs.find((item) => item.mode === "warmup" && ["ready", "running"].includes(item.status));
+
+    if (!job) {
+      const created = await this.createWarmupJob(options, 1, credentials);
+      await this.addLog(created._id, "mr_login_credentials_queued_with_warmup", "Hazır browser yoktu; yeni browser açılıp credential bağlandı.", {
+        email: credentials.email
+      });
+      await realtimeEventService.publish("mrLogin.updated", {
+        action: "credentials_queued_with_warmup",
+        jobId: String(created._id)
+      });
+      return publicJob(created);
+    }
+
+    const updated = await this.repository.submitCredentials(job._id, credentials);
+    await this.addLog(job._id, "mr_login_credentials_received", "Giriş bilgileri hazır browser'a gönderildi.", {
+      email: credentials.email
+    });
+    await realtimeEventService.publish("mrLogin.updated", {
+      action: "credentials_received",
+      jobId: String(job._id)
+    });
+    return publicJob(updated);
   }
 }
 

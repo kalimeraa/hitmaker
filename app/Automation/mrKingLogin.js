@@ -31,6 +31,7 @@ const EMAIL_AUTH_SUBMIT_SELECTORS = [
 ];
 const MANUAL_CHALLENGE_TIMEOUT_MS = 180000;
 const EMAIL_AUTH_TIMEOUT_MS = 900000;
+const CREDENTIAL_WAIT_TIMEOUT_MS = 1800000;
 const DEBUG_ROOT = path.join(process.cwd(), "storage", "mr-login-debug");
 
 async function collectStorage(page) {
@@ -296,6 +297,42 @@ async function detectEmailAuthError(page) {
   return "";
 }
 
+async function detectInvalidCredentials(page) {
+  const text = await page.locator("body").innerText({ timeout: 1200 })
+    .then((value) => String(value || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+
+  if (/Girdiğiniz bilgiler hatalı|Girdiginiz bilgiler hatali|Kontrol edip tekrar deneyiniz|bilgiler hatalı/i.test(text)) {
+    return text.slice(0, 500);
+  }
+
+  return "";
+}
+
+async function handleSecurityWordModal(page, onEvent) {
+  const modal = page.locator(".app-modal__root:visible, .modal:visible, [role=\"dialog\"]:visible")
+    .filter({ hasText: /Size Özel Güvenli Kelimeniz|Güvenli Kelimeniz|DEVAM ET/i })
+    .first();
+  const hasModal = await modal.count().catch(() => 0);
+  const visible = hasModal ? await modal.isVisible().catch(() => false) : false;
+  if (!visible) return false;
+
+  const text = await modal.innerText({ timeout: 2000 })
+    .then((value) => String(value || "").replace(/\s+/g, " ").trim())
+    .catch(() => "");
+  await onEvent("mr_login_security_word_detected", "Güvenli kelime modalı görüldü.", {
+    secureWordText: text.slice(0, 300)
+  });
+
+  const continueButton = modal.locator('button:has-text("DEVAM ET"), button:has-text("Devam Et")').first();
+  await continueButton.click({ timeout: 10000 }).catch(async () => {
+    await page.locator('button:has-text("DEVAM ET"), button:has-text("Devam Et")').first().click({ timeout: 10000 });
+  });
+  await onEvent("mr_login_security_word_continue_clicked", "Güvenli kelime modalında DEVAM ET butonuna basıldı.");
+  await page.waitForTimeout(1500).catch(() => {});
+  return true;
+}
+
 async function clearEmailAuthInput(page) {
   try {
     const input = await firstVisibleLocator(page, EMAIL_AUTH_INPUT_SELECTORS, 1000);
@@ -377,10 +414,55 @@ async function clickSubmitButton(page, onEvent) {
 }
 
 async function prepareLoginForm(page, email, password, onEvent) {
-  await closeBlockingModals(page, onEvent, { timeoutMs: 10000 });
+  await closeBlockingModals(page, onEvent, { timeoutMs: 3500, firstPopupWaitMs: 600, afterCloseQuietMs: 300 });
   await tryFillLoginForm(page, email, password, onEvent);
-  await closeBlockingModals(page, onEvent, { timeoutMs: 5000 });
+  await closeBlockingModals(page, onEvent, { timeoutMs: 3500, firstPopupWaitMs: 500, afterCloseQuietMs: 300 });
   await fillLoginForm(page, email, password, onEvent);
+}
+
+async function waitForCredentials(page, onEvent, getCredentials, lastSubmittedAt = "") {
+  await onEvent("mr_login_ready_for_credentials", "MR browser hazır; dashboarddan giriş bilgisi bekleniyor.", {
+    url: page.url()
+  });
+  const deadline = Date.now() + CREDENTIAL_WAIT_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    await closeBlockingModals(page, onEvent, {
+      timeoutMs: 900,
+      firstPopupWaitMs: 80,
+      afterCloseQuietMs: 160
+    });
+    const credentials = await getCredentials();
+    const submittedAt = credentials && credentials.submittedAt ? new Date(credentials.submittedAt).toISOString() : "";
+    if (credentials && submittedAt && submittedAt !== lastSubmittedAt && credentials.email && credentials.password) {
+      return { ...credentials, submittedAt };
+    }
+    await page.waitForTimeout(1000).catch(() => {});
+  }
+
+  throw new Error("MR hazır browser credential bekleme süresi doldu");
+}
+
+async function attemptLogin(page, credentials, onEvent) {
+  await prepareLoginForm(page, credentials.email, credentials.password, onEvent);
+  await clickSubmitButton(page, onEvent);
+  await onEvent("mr_login_submit_clicked", "Hemen Giriş Yap butonuna tıklandı.", { url: page.url() });
+  await captureDebugArtifact(page, onEvent, "after-submit-click");
+
+  await page.waitForTimeout(2500);
+  const invalidCredentials = await detectInvalidCredentials(page);
+  if (invalidCredentials) {
+    await onEvent("mr_login_invalid_credentials", "Girdiğiniz bilgiler hatalı; dashboarddan yeni credential bekleniyor.", {
+      reason: invalidCredentials,
+      email: credentials.email
+    });
+    await captureDebugArtifact(page, onEvent, "invalid-credentials");
+    return { invalidCredentials: true };
+  }
+
+  await waitForManualTurnstileIfPresent(page, onEvent);
+  await closeBlockingModals(page, onEvent, { timeoutMs: 1800, firstPopupWaitMs: 150, afterCloseQuietMs: 250 });
+  return { invalidCredentials: false };
 }
 
 async function runMrKingLogin({
@@ -390,6 +472,9 @@ async function runMrKingLogin({
   profileKey,
   proxyUrl = "",
   getEmailAuthCode = async () => "",
+  getCredentials = async () => null,
+  markReady = async () => {},
+  waitForCredentials: shouldWaitForCredentials = false,
   onEvent = async () => {}
 }) {
   let context;
@@ -412,19 +497,44 @@ async function runMrKingLogin({
     await page.waitForTimeout(1200);
     await onEvent("mr_login_navigation_completed", "Login sayfası yüklendi.", { url: page.url() });
 
-    await closeBlockingModals(page, onEvent, { timeoutMs: 10000 });
+    await closeBlockingModals(page, onEvent, { timeoutMs: 3500, firstPopupWaitMs: 600, afterCloseQuietMs: 300 });
     await waitForManualTurnstileIfPresent(page, onEvent);
 
-    await prepareLoginForm(page, email, password, onEvent);
-    await clickSubmitButton(page, onEvent);
-    await onEvent("mr_login_submit_clicked", "Hemen Giriş Yap butonuna tıklandı.", { url: page.url() });
-    await captureDebugArtifact(page, onEvent, "after-submit-click");
+    if (shouldWaitForCredentials) {
+      await markReady();
+    }
 
-    await page.waitForTimeout(4000);
-    await waitForManualTurnstileIfPresent(page, onEvent);
-    await closeBlockingModals(page, onEvent, { timeoutMs: 5000 });
+    let credentials = { email, password, submittedAt: "" };
+    let lastCredentialSubmittedAt = "";
+    let submittedWithoutCredentialError = false;
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      if (shouldWaitForCredentials) {
+        credentials = await waitForCredentials(page, onEvent, getCredentials, lastCredentialSubmittedAt);
+        lastCredentialSubmittedAt = credentials.submittedAt;
+      }
+
+      const attemptResult = await attemptLogin(page, credentials, onEvent);
+      if (!attemptResult.invalidCredentials) {
+        submittedWithoutCredentialError = true;
+        break;
+      }
+      if (!shouldWaitForCredentials) {
+        return {
+          success: false,
+          error: "invalid_credentials",
+          failureReason: "invalid_credentials",
+          url: page.url()
+        };
+      }
+    }
+    if (!submittedWithoutCredentialError) {
+      throw new Error("MR giriş için çok fazla hatalı credential denendi");
+    }
+
     await waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCode);
-    await page.waitForTimeout(8000);
+    await page.waitForTimeout(3000);
+    await handleSecurityWordModal(page, onEvent);
+    await page.waitForTimeout(1500);
 
     const url = page.url();
     const cookies = await collectCookies(context);

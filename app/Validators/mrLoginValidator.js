@@ -27,9 +27,35 @@ function validateLaunchPayload(payload = {}) {
   };
 }
 
+function validateWarmupPayload(payload = {}) {
+  const loginUrl = clean(payload.loginUrl) || DEFAULT_LOGIN_URL;
+  const proxyUrl = clean(payload.proxyUrl);
+  const browserCount = Math.max(1, Math.min(Number(payload.browserCount) || 1, 4));
+
+  if (!/^https?:\/\/[^ ]+$/i.test(loginUrl)) throw new HttpError(422, "MR login adresi geçersiz");
+
+  return {
+    loginUrl,
+    proxyUrl,
+    browserCount
+  };
+}
+
+function validateCredentialPayload(payload = {}) {
+  const email = clean(payload.email) || DEFAULT_EMAIL;
+  const password = clean(payload.password) || DEFAULT_PASSWORD;
+
+  if (!email) throw new HttpError(422, "Email / kullanıcı adı gerekli");
+  if (!password) throw new HttpError(422, "Şifre gerekli");
+
+  return { email, password };
+}
+
 module.exports = {
   DEFAULT_EMAIL,
   DEFAULT_PASSWORD,
   DEFAULT_LOGIN_URL,
-  validateLaunchPayload
+  validateLaunchPayload,
+  validateWarmupPayload,
+  validateCredentialPayload
 };

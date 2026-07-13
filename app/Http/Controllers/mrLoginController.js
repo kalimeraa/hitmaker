@@ -11,6 +11,16 @@ class MrLoginController {
     res.status(202).json(job);
   }
 
+  async warmup(req, res) {
+    const jobs = await mrLoginService.warmup(req.body);
+    res.status(202).json(jobs);
+  }
+
+  async credentials(req, res) {
+    const job = await mrLoginService.submitCredentials(req.body);
+    res.json(job);
+  }
+
   async emailCode(req, res) {
     const job = await mrLoginService.submitEmailCode(req.params.id, req.body);
     if (!job) return res.status(404).json({ error: "MR login job not found" });

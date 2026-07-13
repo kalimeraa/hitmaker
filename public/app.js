@@ -1091,6 +1091,11 @@ function renderMrLoginResults(job) {
   }
 
   const cookies = job.cookies || [];
+  const logs = job.logs || [];
+  const lastActionableError = [...logs].reverse().find((log) => [
+    "mr_login_invalid_credentials",
+    "mr_login_email_auth_code_rejected"
+  ].includes(log.event));
   const localStorage = job.session && job.session.localStorage || [];
   const sessionStorage = job.session && job.session.sessionStorage || [];
   const cookieRows = cookies.slice(0, 30).map((cookie) => `
@@ -1111,6 +1116,12 @@ function renderMrLoginResults(job) {
     `).join("");
 
   $("#mrLoginResults").html(`
+    ${lastActionableError ? `
+      <div class="alert alert-danger m-3 mb-0">
+        <div class="fw-semibold">${lastActionableError.event === "mr_login_invalid_credentials" ? "Giriş bilgileri hatalı" : "Email doğrulama kodu reddedildi"}</div>
+        <div>${escapeHtml(lastActionableError.message || "")}</div>
+      </div>
+    ` : ""}
     <div class="mr-login-result-section">
       <div class="d-flex justify-content-between gap-2 flex-wrap">
         <div>
@@ -1152,21 +1163,46 @@ async function loadMrLoginJobs() {
   renderMrLoginJobs();
 }
 
-async function launchMrLogin() {
-  const $button = $("#mrLoginLaunchBtn");
+function readMrLoginPayload() {
+  return {
+    loginUrl: cleanOptionalText($("#mrLoginUrl").val()),
+    email: cleanOptionalText($("#mrLoginEmail").val()),
+    password: cleanOptionalText($("#mrLoginPassword").val()),
+    browserCount: Number($("#mrLoginBrowserCount").val()) || 1
+  };
+}
+
+async function warmupMrLoginPool() {
+  const $button = $("#mrLoginWarmupBtn");
   const originalText = $button.text();
-  $button.prop("disabled", true).text("Kuyruğa alınıyor...");
+  $button.prop("disabled", true).text("Browser açılıyor...");
 
   try {
     await $.ajax({
       method: "POST",
-      url: "/api/mr-giris/launch",
+      url: "/api/mr-giris/warmup",
       contentType: "application/json",
-      data: JSON.stringify({
-        loginUrl: cleanOptionalText($("#mrLoginUrl").val()),
-        email: cleanOptionalText($("#mrLoginEmail").val()),
-        password: cleanOptionalText($("#mrLoginPassword").val())
-      })
+      data: JSON.stringify(readMrLoginPayload())
+    });
+    await loadMrLoginJobs();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "MR hazır browser açılamadı"));
+  } finally {
+    $button.prop("disabled", false).text(originalText);
+  }
+}
+
+async function launchMrLogin() {
+  const $button = $("#mrLoginLaunchBtn");
+  const originalText = $button.text();
+  $button.prop("disabled", true).text("Giriş gönderiliyor...");
+
+  try {
+    await $.ajax({
+      method: "POST",
+      url: "/api/mr-giris/credentials",
+      contentType: "application/json",
+      data: JSON.stringify(readMrLoginPayload())
     });
     await loadMrLoginJobs();
   } catch (error) {
@@ -1374,6 +1410,9 @@ $("#gmailCreatorJobs").on("click", "[data-gmail-creator-delete]", function () {
 $("#mrLoginForm").on("submit", async function (event) {
   event.preventDefault();
   await launchMrLogin();
+});
+$("#mrLoginWarmupBtn").on("click", async function () {
+  await warmupMrLoginPool();
 });
 $("#mrLoginEmailCodeForm").on("submit", async function (event) {
   event.preventDefault();

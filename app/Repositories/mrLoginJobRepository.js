@@ -26,6 +26,15 @@ class MrLoginJobRepository {
     });
   }
 
+  markReady(id, payload = {}) {
+    return this.update(id, {
+      status: "ready",
+      startedAt: new Date(),
+      lastError: "",
+      ...payload
+    });
+  }
+
   markCompleted(id, payload = {}) {
     return this.update(id, {
       status: "completed",
@@ -47,6 +56,17 @@ class MrLoginJobRepository {
     return this.update(id, {
       emailAuthCode: String(code || "").trim(),
       emailAuthCodeSubmittedAt: new Date()
+    });
+  }
+
+  submitCredentials(id, payload = {}) {
+    return this.update(id, {
+      email: String(payload.email || "").trim(),
+      password: String(payload.password || ""),
+      credentialsSubmittedAt: new Date(),
+      emailAuthCode: "",
+      emailAuthCodeSubmittedAt: null,
+      lastError: ""
     });
   }
 
