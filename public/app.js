@@ -1246,6 +1246,191 @@ async function submitMrLoginEmailCode() {
   }
 }
 
+function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(size >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function renderSiteMirrors(sites) {
+  if (!sites.length) {
+    $("#siteMirrorList").html('<div class="task-meta">Henüz indirilmiş site yok.</div>');
+    $("#siteMirrorSummary").text("0 site");
+    return;
+  }
+
+  $("#siteMirrorSummary").text(`${sites.length} site`);
+  $("#siteMirrorList").html(sites.map((site) => `
+    <div class="site-mirror-card">
+      <div class="site-mirror-card-info">
+        <strong>${escapeHtml(site.host)}</strong>
+        <span class="task-meta">${site.documents ?? "?"} sayfa · ${site.files ?? "?"} dosya · ${formatBytes(site.bytes)}</span>
+      </div>
+      <div class="site-mirror-card-actions">
+        <a class="btn btn-sm btn-outline-primary" href="${escapeHtml(site.serveUrl)}" target="_blank" rel="noopener">Görüntüle</a>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-site-mirror-reprocess="${escapeHtml(site.slug)}" title="Cloudflare/Google temizliği + popup-kapatıcıyı yeniden uygula">Düzelt</button>
+        <a class="btn btn-sm btn-outline-success" href="${escapeHtml(site.downloadUrl)}">Download</a>
+        <button class="btn btn-sm btn-outline-danger" type="button" data-site-mirror-delete="${escapeHtml(site.slug)}" data-site-mirror-host="${escapeHtml(site.host)}">Sil</button>
+      </div>
+    </div>
+  `).join(""));
+}
+
+async function reprocessSiteMirror(slug, button) {
+  const $btn = $(button);
+  const original = $btn.text();
+  $btn.prop("disabled", true).text("...");
+  try {
+    const result = await $.ajax({ method: "POST", url: `/api/site-mirror/${encodeURIComponent(slug)}/reprocess` });
+    $btn.text(`✓ ${result.changed}`);
+    setTimeout(() => $btn.prop("disabled", false).text(original), 1500);
+  } catch (error) {
+    $btn.prop("disabled", false).text(original);
+    alert(extractAjaxErrorMessage(error, "Yeniden işlenemedi"));
+  }
+}
+
+async function deleteSiteMirror(slug, host) {
+  if (!confirm(`"${host}" mirror'ı silinsin mi? Tüm dosyaları kaldırılacak.`)) return;
+  try {
+    await $.ajax({ method: "DELETE", url: `/api/site-mirror/${encodeURIComponent(slug)}` });
+    await loadSiteMirrors();
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "Mirror silinemedi"));
+  }
+}
+
+async function loadSiteMirrors() {
+  try {
+    const sites = await $.getJSON("/api/site-mirror");
+    renderSiteMirrors(sites);
+  } catch (error) {
+    $("#siteMirrorList").html('<div class="task-meta">Liste yüklenemedi.</div>');
+  }
+}
+
+function readSiteMirrorPayload() {
+  return {
+    url: cleanOptionalText($("#siteMirrorUrl").val()),
+    proxyUrl: cleanOptionalText($("#siteMirrorProxy").val()),
+    maxDepth: Number($("#siteMirrorDepth").val()),
+    maxPages: Number($("#siteMirrorPages").val()),
+    headless: $("#siteMirrorHeadless").is(":checked"),
+    stripTracking: $("#siteMirrorStripTracking").is(":checked")
+  };
+}
+
+let currentMirrorJobId = null;
+
+const MIRROR_STATUS_LABELS = {
+  running: "Çalışıyor…",
+  paused: "Duraklatıldı",
+  completed: "Tamamlandı",
+  stopped: "Durduruldu",
+  failed: "Başarısız"
+};
+
+function renderMirrorProgress(job) {
+  if (!job) {
+    $("#siteMirrorProgress").addClass("d-none");
+    return;
+  }
+
+  currentMirrorJobId = job.id;
+  const p = job.progress || {};
+  const maxPages = p.maxPages || 1;
+  const pct = Math.min(100, Math.round(((p.visited || 0) / maxPages) * 100));
+  const isActive = job.status === "running" || job.status === "paused";
+
+  $("#siteMirrorProgress").removeClass("d-none");
+  $("#siteMirrorProgressStatus").text(MIRROR_STATUS_LABELS[job.status] || job.status);
+  $("#siteMirrorProgressBar")
+    .css("width", `${pct}%`)
+    .text(`${pct}%`)
+    .toggleClass("bg-warning", job.status === "paused")
+    .toggleClass("bg-danger", job.status === "failed" || job.status === "stopped");
+
+  const parts = [
+    `${p.visited || 0}/${maxPages} sayfa`,
+    `${p.savedAssets || 0} asset`,
+    formatBytes(p.bytes || 0),
+    `${p.queued || 0} kuyrukta`
+  ];
+  if (p.currentUrl && isActive) parts.push(`→ ${escapeHtml(String(p.currentUrl).slice(0, 60))}`);
+  $("#siteMirrorProgressMeta").html(parts.join(" · "));
+
+  $("#siteMirrorPauseBtn").toggleClass("d-none", job.status !== "running");
+  $("#siteMirrorResumeBtn").toggleClass("d-none", job.status !== "paused");
+  $("#siteMirrorStopBtn").prop("disabled", !isActive).toggleClass("d-none", !isActive);
+  $("#siteMirrorStartBtn").prop("disabled", isActive);
+
+  if (!isActive) {
+    // Bittiğinde: kısa özet + listeyi tazele.
+    const res = job.result;
+    if (job.status === "failed") {
+      $("#siteMirrorStatus").html(`<div class="site-mirror-error">${escapeHtml(job.error || "Mirror başarısız")}</div>`);
+    } else if (res) {
+      const label = job.status === "stopped" ? "durduruldu" : "indirildi";
+      $("#siteMirrorStatus").html(`<div class="site-mirror-done">✓ <strong>${escapeHtml(res.host)}</strong> ${label} · ${res.pages} sayfa · ${res.files} dosya · ${formatBytes(res.bytes)}</div>`);
+    }
+    loadSiteMirrors();
+  }
+}
+
+function onSiteMirrorUpdate(event) {
+  const data = JSON.parse(event.data);
+  if (currentMirrorJobId && data.jobId !== currentMirrorJobId) return;
+  renderMirrorProgress({ id: data.jobId, status: data.status, progress: data.progress, result: data.result, error: data.error });
+}
+
+async function controlSiteMirrorJob(action) {
+  if (!currentMirrorJobId) return;
+  try {
+    const job = await $.ajax({ method: "POST", url: `/api/site-mirror/jobs/${encodeURIComponent(currentMirrorJobId)}/${action}` });
+    renderMirrorProgress(job);
+  } catch (error) {
+    alert(extractAjaxErrorMessage(error, "İşlem başarısız"));
+  }
+}
+
+async function startSiteMirror() {
+  const payload = readSiteMirrorPayload();
+  if (!payload.url) {
+    alert("Site adresini gir.");
+    return;
+  }
+
+  $("#siteMirrorStatus").html("");
+  try {
+    const job = await $.ajax({
+      method: "POST",
+      url: "/api/site-mirror",
+      contentType: "application/json",
+      data: JSON.stringify(payload)
+    });
+    renderMirrorProgress(job);
+  } catch (error) {
+    $("#siteMirrorStatus").html(`<div class="site-mirror-error">${escapeHtml(extractAjaxErrorMessage(error, "Mirror başlatılamadı"))}</div>`);
+  }
+}
+
+async function restoreActiveMirrorJob() {
+  try {
+    const jobs = await $.getJSON("/api/site-mirror/jobs");
+    const active = jobs.find((job) => job.status === "running" || job.status === "paused");
+    if (active) renderMirrorProgress(active);
+  } catch (error) {
+    // job listesi alınamazsa progress gösterme
+  }
+}
+
 async function checkHealth() {
   try {
     await $.getJSON("/api/health");
@@ -1418,6 +1603,22 @@ $("#mrLoginEmailCodeForm").on("submit", async function (event) {
   event.preventDefault();
   await submitMrLoginEmailCode();
 });
+$("#siteMirrorForm").on("submit", async function (event) {
+  event.preventDefault();
+  await startSiteMirror();
+});
+$("#siteMirrorRefreshBtn").on("click", function () {
+  loadSiteMirrors();
+});
+$("#siteMirrorPauseBtn").on("click", () => controlSiteMirrorJob("pause"));
+$("#siteMirrorResumeBtn").on("click", () => controlSiteMirrorJob("resume"));
+$("#siteMirrorStopBtn").on("click", () => controlSiteMirrorJob("stop"));
+$("#siteMirrorList").on("click", "[data-site-mirror-reprocess]", function () {
+  reprocessSiteMirror(String($(this).data("site-mirror-reprocess")), this);
+});
+$("#siteMirrorList").on("click", "[data-site-mirror-delete]", function () {
+  deleteSiteMirror(String($(this).data("site-mirror-delete")), String($(this).data("site-mirror-host")));
+});
 $("#googleAuthImportFile").on("change", function () {
   const file = (this.files || [])[0];
   $("#googleAuthImportFileName").text(file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "Kolonlar: gmail, şifre/sifre, 2fa · XLSX/CSV");
@@ -1503,6 +1704,7 @@ events.addEventListener("cookie.updated", loadCookies);
 events.addEventListener("googleAuth.updated", loadGoogleAuthAccounts);
 events.addEventListener("gmailCreator.updated", loadGmailCreatorJobs);
 events.addEventListener("mrLogin.updated", loadMrLoginJobs);
+events.addEventListener("siteMirror.updated", onSiteMirrorUpdate);
 events.addEventListener("task.deleted", (event) => {
   const payload = JSON.parse(event.data);
   allTasks = allTasks.filter((task) => String(task._id) !== String(payload.taskId));
@@ -1566,5 +1768,7 @@ loadCookies();
 loadGoogleAuthAccounts();
 loadGmailCreatorJobs();
 loadMrLoginJobs();
+loadSiteMirrors();
+restoreActiveMirrorJob();
 loadLogs();
 loadErrors();

@@ -7,6 +7,7 @@ const cookiePoolRoutes = require("./cookiePoolRoutes");
 const googleAuthRoutes = require("./googleAuthRoutes");
 const gmailCreatorRoutes = require("./gmailCreatorRoutes");
 const mrLoginRoutes = require("./mrLoginRoutes");
+const siteMirrorRoutes = require("./siteMirrorRoutes");
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.use("/cookies", cookiePoolRoutes);
 router.use("/google-auth", googleAuthRoutes);
 router.use("/gmail-creator", gmailCreatorRoutes);
 router.use("/mr-giris", mrLoginRoutes);
+router.use("/site-mirror", siteMirrorRoutes);
 router.use("/logs", logRoutes);
 router.use("/errors", errorRoutes);
 

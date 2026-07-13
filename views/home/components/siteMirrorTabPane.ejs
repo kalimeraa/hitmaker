@@ -1,0 +1,74 @@
+<div class="tab-pane fade" id="siteMirrorPane">
+  <div class="toolbar">
+    <h2>Site Mirror</h2>
+    <div class="toolbar-actions">
+      <button class="btn btn-sm btn-outline-secondary" type="button" id="siteMirrorRefreshBtn">Yenile</button>
+    </div>
+  </div>
+
+  <form id="siteMirrorForm" class="site-mirror-form" autocomplete="off">
+    <div>
+      <label class="form-label" for="siteMirrorUrl">Site Adresi</label>
+      <input class="form-control" id="siteMirrorUrl" placeholder="https://example.com" autocomplete="off">
+    </div>
+    <div>
+      <label class="form-label" for="siteMirrorProxy">Proxy (opsiyonel)</label>
+      <input class="form-control" id="siteMirrorProxy" placeholder="http://kullanici:sifre@host:port" autocomplete="off">
+    </div>
+    <div class="site-mirror-form-row">
+      <div>
+        <label class="form-label" for="siteMirrorDepth">Derinlik</label>
+        <input class="form-control" id="siteMirrorDepth" type="number" min="0" max="5" value="2">
+      </div>
+      <div>
+        <label class="form-label" for="siteMirrorPages">Maks. Sayfa</label>
+        <input class="form-control" id="siteMirrorPages" type="number" min="1" max="200" value="25">
+      </div>
+      <div class="form-check site-mirror-headless">
+        <input class="form-check-input" type="checkbox" id="siteMirrorHeadless" checked>
+        <label class="form-check-label" for="siteMirrorHeadless">Headless</label>
+      </div>
+    </div>
+
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="siteMirrorStripTracking" checked>
+      <label class="form-check-label" for="siteMirrorStripTracking">Cloudflare & Google script'lerini çıkar (boş sayfa/redirect'i önler)</label>
+    </div>
+
+    <div class="site-mirror-hint">
+      <strong>Derinlik nedir?</strong> Verdiğin sayfadan başlayıp <em>aynı site içindeki</em> linkleri kaç tık öteye kadar takip edeceğini belirler:
+      <ul>
+        <li><strong>0</strong> — sadece verdiğin sayfa (linkler takip edilmez)</li>
+        <li><strong>1</strong> — o sayfa + üstündeki linklerin gittiği sayfalar</li>
+        <li><strong>2</strong> — onların içindeki linkler de (2 tık uzaktakiler)</li>
+      </ul>
+      Sadece aynı domain gezilir; dış siteler atlanır. <strong>Maks. Sayfa</strong> toplam sayfa sayısını sınırlar (derinlik yüksek olsa bile durur). Her sayfanın CSS/JS/görsel/font'ları her durumda indirilir.
+    </div>
+    <div class="site-mirror-submit">
+      <button class="btn btn-success btn-lg w-100" type="submit" id="siteMirrorStartBtn">Siteyi İndir (Mirror)</button>
+    </div>
+  </form>
+
+  <div id="siteMirrorProgress" class="site-mirror-progress mt-3 d-none">
+    <div class="site-mirror-progress-head">
+      <span id="siteMirrorProgressStatus">Çalışıyor…</span>
+      <div class="site-mirror-progress-controls">
+        <button class="btn btn-sm btn-outline-warning" type="button" id="siteMirrorPauseBtn">Duraklat</button>
+        <button class="btn btn-sm btn-outline-primary d-none" type="button" id="siteMirrorResumeBtn">Devam Et</button>
+        <button class="btn btn-sm btn-outline-danger" type="button" id="siteMirrorStopBtn">Durdur</button>
+      </div>
+    </div>
+    <div class="progress" role="progressbar">
+      <div class="progress-bar" id="siteMirrorProgressBar" style="width: 0%">0%</div>
+    </div>
+    <div class="site-mirror-progress-meta task-meta" id="siteMirrorProgressMeta">—</div>
+  </div>
+
+  <div id="siteMirrorStatus" class="site-mirror-status mt-2"></div>
+
+  <div class="site-mirror-list-header mt-3">
+    <span>İndirilen Siteler</span>
+    <span class="task-meta" id="siteMirrorSummary">—</span>
+  </div>
+  <div id="siteMirrorList" class="site-mirror-list mt-2"></div>
+</div>

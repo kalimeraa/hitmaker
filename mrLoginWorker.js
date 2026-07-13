@@ -1,12 +1,19 @@
 const { Worker } = require("bullmq");
 const { mrLoginMaxBrowsers, redis } = require("./config/app");
 const { connectDb } = require("./bootstrap/database");
-const { mrLoginQueueName } = require("./bootstrap/queue");
+const { mrLoginQueueName, mrLoginQueue } = require("./bootstrap/queue");
 const mrLoginService = require("./app/Services/mrLoginService");
 const { logger } = require("./app/Services/logService");
 
 async function main() {
   await connectDb();
+
+  // Proje açılışında eski/stalled warmup job'ları otomatik browser AÇMASIN diye kuyruğu boşalt.
+  // Hazır browser'lar yalnızca "Browserı hazır et" butonuyla (POST /api/mr-giris/warmup) açılır.
+  // UI geçmişi MongoDB'de tutulduğundan bu temizlik listeyi etkilemez.
+  await mrLoginQueue.obliterate({ force: true }).catch((error) => {
+    logger.warn("mr_login_queue_clear_failed", { error: error.message });
+  });
 
   const worker = new Worker(mrLoginQueueName, (job) => mrLoginService.runJob(job.data.jobId), {
     connection: redis,

@@ -273,6 +273,114 @@ h2 {
   font-weight: 700;
 }
 
+.site-mirror-form {
+  display: grid;
+  gap: 12px;
+}
+
+.site-mirror-form-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.site-mirror-headless {
+  align-self: center;
+  padding-top: 20px;
+}
+
+.site-mirror-hint {
+  font-size: 0.85rem;
+  color: var(--muted, #6c757d);
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.site-mirror-hint ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.site-mirror-hint li {
+  margin: 2px 0;
+}
+
+.site-mirror-progress {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.site-mirror-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.site-mirror-progress-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.site-mirror-progress-meta {
+  word-break: break-all;
+}
+
+.site-mirror-list {
+  display: grid;
+  gap: 8px;
+}
+
+.site-mirror-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.site-mirror-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.site-mirror-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.site-mirror-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.site-mirror-done {
+  color: var(--bs-success, #198754);
+  font-weight: 600;
+}
+
+.site-mirror-error {
+  color: var(--bs-danger, #dc3545);
+  white-space: pre-wrap;
+}
+
 .mr-login-status,
 .mr-login-results {
   border: 1px solid var(--line);
