@@ -12,10 +12,12 @@ const {
   waitForManualRecaptchaIfNeeded
 } = require("./googleAuthLogin");
 const { generateUsername } = require("../Domain/gmailSignupIdentity");
+const { createPageSnapshotter } = require("./pageSnapshotService");
 
 const SIGNUP_URL = "https://accounts.google.com/signup/v2/webcreateaccount?flowName=GlifWebSignIn&flowEntry=SignUp";
 const MANUAL_TIMEOUT_MS = Number(process.env.GMAIL_CREATOR_TIMEOUT_MS || 600000);
 const NAV_TIMEOUT_MS = Number(process.env.GMAIL_CREATOR_NAV_TIMEOUT_MS || 120000);
+const MAX_SIGNUP_STEPS = Number(process.env.GMAIL_CREATOR_MAX_STEPS || 24);
 
 function isSignupSuccessUrl(url = "") {
   return /myaccount\.google\.com|mail\.google\.com|accounts\.google\.com\/AccountChooser|accounts\.google\.com\/signin\/v2\/challenge\/done/i.test(url);
@@ -84,6 +86,11 @@ async function detectSmsCodeStep(page) {
   return code.isVisible({ timeout: 1200 }).catch(() => false);
 }
 
+async function detectNameStep(page) {
+  const first = await visibleFirst(page, ["input[name='firstName']", "input#firstName"], 1500);
+  return Boolean(first);
+}
+
 async function detectBirthdayStep(page) {
   if (/\/signup\/birthdaygender/i.test(page.url())) return true;
 
@@ -97,6 +104,38 @@ async function detectBirthdayStep(page) {
 
   const heading = page.getByText(/basic information|enter your birthday and gender|doğum tarihinizi ve cinsiyetinizi/i).first();
   return heading.isVisible({ timeout: 1200 }).catch(() => false);
+}
+
+async function detectUsernameStep(page) {
+  if (/\/signup\/username/i.test(page.url())) return true;
+
+  const customRadio = page.locator("input[name='usernameRadio'][value='custom']").first();
+  if (await customRadio.isVisible({ timeout: 1200 }).catch(() => false)) return true;
+
+  const username = await visibleFirst(page, [
+    "input[name='Username']",
+    "input[name='username']",
+    "input[aria-label*='Gmail']",
+    "input[type='email']"
+  ], 1500);
+  return Boolean(username);
+}
+
+async function detectPasswordStep(page) {
+  const password = await visibleFirst(page, ["input[name='Passwd']", "input[type='password']"], 1500);
+  return Boolean(password);
+}
+
+async function detectCurrentSignupStep(page) {
+  if (isSignupSuccessUrl(page.url())) return "success";
+  if (await detectRecaptchaChallenge(page)) return "recaptcha";
+  if (await detectSmsCodeStep(page)) return "sms";
+  if (await detectPhoneStep(page)) return "phone";
+  if (await detectBirthdayStep(page)) return "birthday";
+  if (await detectNameStep(page)) return "name";
+  if (await detectUsernameStep(page)) return "username";
+  if (await detectPasswordStep(page)) return "password";
+  return "unknown";
 }
 
 async function selectByNativeOrKeyboard(page, nativeSelector, labelPattern, optionIndex) {
@@ -136,12 +175,62 @@ async function selectByNativeOrKeyboard(page, nativeSelector, labelPattern, opti
   return true;
 }
 
+async function selectMaterialCombobox(page, labelText, value) {
+  const label = page.getByText(new RegExp(`^${labelText}$`, "i")).first();
+  const labelId = await label.getAttribute("id").catch(() => "");
+  const combo = labelId
+    ? page.locator(`[role='combobox'][aria-labelledby~='${labelId}']`).first()
+    : page.locator("[role='combobox']").filter({ hasText: new RegExp(`^${labelText}$`, "i") }).first();
+
+  if (!(await combo.isVisible({ timeout: 2000 }).catch(() => false))) return false;
+
+  await combo.click({ timeout: 5000 });
+  await randomDelay(250, 500);
+
+  const option = page
+    .locator(`ul[role='listbox'][aria-label='${labelText}'] [role='option'][data-value='${value}']`)
+    .first();
+
+  if (await option.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await option.click({ timeout: 5000 });
+    await randomDelay(250, 500);
+    return true;
+  }
+
+  const forceOption = page
+    .locator(`ul[role='listbox'][aria-label='${labelText}'] [role='option'][data-value='${value}']`)
+    .first();
+  if (await forceOption.count().catch(() => 0)) {
+    await forceOption.click({ timeout: 5000, force: true });
+    await randomDelay(250, 500);
+    return true;
+  }
+
+  await combo.focus().catch(() => {});
+  await page.keyboard.press("Home").catch(() => {});
+  for (let index = 0; index < Number(value); index += 1) {
+    await page.keyboard.press("ArrowDown");
+    await randomDelay(40, 100);
+  }
+  await page.keyboard.press("Enter");
+  await randomDelay(250, 500);
+  return true;
+}
+
 async function clearAndHumanType(locator, value) {
   await locator.fill("").catch(async () => {
     await locator.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
     await locator.press("Backspace").catch(() => {});
   });
   await humanType(locator, String(value));
+}
+
+async function clearAndFill(locator, value) {
+  await locator.fill("", { timeout: 5000 }).catch(async () => {
+    await locator.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
+    await locator.press("Backspace").catch(() => {});
+  });
+  await locator.fill(String(value), { timeout: 5000 });
 }
 
 async function fillNameStep(page, identity, onEvent) {
@@ -175,20 +264,26 @@ async function fillBirthdayStep(page, identity, onEvent) {
   await onEvent("gmail_creator_birthday_step_started", {});
   const { day, month, year } = identity.birthday;
 
-  await selectByNativeOrKeyboard(page, "select#month, select[name='month']", /month|ay/i, month);
+  const monthSelected = await selectMaterialCombobox(page, "Month", month);
+  if (!monthSelected) {
+    await selectByNativeOrKeyboard(page, "select#month, select[name='month']", /month|ay/i, month);
+  }
   await randomDelay(200, 500);
 
   await humanHoverClick(page, dayInput);
-  await clearAndHumanType(dayInput, day);
+  await clearAndFill(dayInput, day);
   await randomDelay(200, 500);
 
   const yearInput = page.locator("input[name='year'], input#year, input[aria-label*='Year'], input[aria-label*='Yıl']").first();
   if (await yearInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await humanHoverClick(page, yearInput);
-    await clearAndHumanType(yearInput, year);
+    await clearAndFill(yearInput, year);
   }
 
-  await selectByNativeOrKeyboard(page, "select#gender, select[name='gender']", /gender|cinsiyet/i, 1);
+  const genderSelected = await selectMaterialCombobox(page, "Gender", 1);
+  if (!genderSelected) {
+    await selectByNativeOrKeyboard(page, "select#gender, select[name='gender']", /gender|cinsiyet/i, 1);
+  }
 
   await randomDelay(500, 1100);
   await clickNextButton(page);
@@ -199,9 +294,23 @@ async function fillBirthdayStep(page, identity, onEvent) {
 }
 
 async function fillUsernameStep(page, identity, onEvent, usernameAttempt = 0) {
+  const customRadio = page.locator("input[name='usernameRadio'][value='custom']").first();
+  if (await customRadio.isVisible({ timeout: 1200 }).catch(() => false)) {
+    await onEvent("gmail_creator_username_custom_option_started", {});
+    await customRadio.click({ timeout: 5000, force: true }).catch(async () => {
+      const customText = page.getByText(/create your own gmail address|kendi gmail adresinizi oluşturun/i).first();
+      if (await customText.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await humanHoverClick(page, customText);
+      }
+    });
+    await randomDelay(500, 1000);
+  }
+
   const usernameInput = await visibleFirst(page, [
     "input[name='Username']",
     "input[name='username']",
+    "input[aria-label='Create a Gmail address']",
+    "input[aria-label*='Gmail address']",
     "input[aria-label*='Gmail']",
     "input[type='email']"
   ]);
@@ -238,12 +347,12 @@ async function fillPasswordStep(page, identity, onEvent) {
 
   await onEvent("gmail_creator_password_step_started", {});
   await humanHoverClick(page, passwordInput);
-  await humanType(passwordInput, identity.password);
+  await clearAndFill(passwordInput, identity.password);
   await randomDelay(400, 900);
 
   if (await confirmInput.isVisible({ timeout: 2000 }).catch(() => false)) {
     await humanHoverClick(page, confirmInput);
-    await humanType(confirmInput, identity.password);
+    await clearAndFill(confirmInput, identity.password);
   }
 
   await randomDelay(500, 1100);
@@ -294,24 +403,7 @@ async function waitForManualBirthdayStep(page, onEvent) {
   });
 }
 
-async function runSignupWizard(page, identity, onEvent) {
-  if (!(await fillNameStep(page, identity, onEvent))) {
-    return { success: false, error: "gmail_creator_name_step_missing", failureReason: "signup_step", url: page.url() };
-  }
-
-  await handleManualBlockers(page, onEvent);
-
-  if (!(await fillBirthdayStep(page, identity, onEvent))) {
-    if (await detectBirthdayStep(page)) {
-      const birthdayDone = await waitForManualBirthdayStep(page, onEvent);
-      if (!birthdayDone.success) return birthdayDone;
-    } else {
-      return { success: false, error: "gmail_creator_birthday_step_missing", failureReason: "signup_step", url: page.url() };
-    }
-  }
-
-  await handleManualBlockers(page, onEvent);
-
+async function runUsernameStep(page, identity, onEvent) {
   const usernameResult = await fillUsernameStep(page, identity, onEvent);
   if (!usernameResult.filled) {
     return { success: false, error: "gmail_creator_username_step_missing", failureReason: "signup_step", url: page.url() };
@@ -319,25 +411,73 @@ async function runSignupWizard(page, identity, onEvent) {
 
   identity.username = usernameResult.username;
   identity.email = usernameResult.email;
+  return { success: true };
+}
 
-  await handleManualBlockers(page, onEvent);
+async function runSignupWizard(page, identity, onEvent, snapshotPage = async () => {}) {
+  for (let stepIndex = 1; stepIndex <= MAX_SIGNUP_STEPS; stepIndex += 1) {
+    const step = await detectCurrentSignupStep(page);
+    await onEvent("gmail_creator_step_detected", { step, stepIndex, url: page.url() });
+    await snapshotPage(page, `before_${String(stepIndex).padStart(2, "0")}_${step}`, { step, stepIndex });
 
-  if (!(await fillPasswordStep(page, identity, onEvent))) {
-    return { success: false, error: "gmail_creator_password_step_missing", failureReason: "signup_step", url: page.url() };
-  }
+    if (step === "success") return { success: true, url: page.url() };
 
-  await handleManualBlockers(page, onEvent);
+    if (step === "recaptcha" || step === "phone" || step === "sms") {
+      const manual = await handleManualBlockers(page, onEvent);
+      if (!manual.success) return manual;
+      await snapshotPage(page, `after_${String(stepIndex).padStart(2, "0")}_${step}`, { step, stepIndex });
+      continue;
+    }
 
-  // Google bazen ek adımlar (telefon, onay, captcha) gösterir — görünür modda insan tamamlar.
-  if (!isSignupSuccessUrl(page.url())) {
-    const finalWait = await waitForManualProgress(page, onEvent, {
-      hint: "Kalan adımları (telefon, captcha, sözleşme) tarayıcıda tamamlayın.",
-      detectDone: async () => isSignupSuccessUrl(page.url())
+    if (step === "name") {
+      if (!(await fillNameStep(page, identity, onEvent))) {
+        return { success: false, error: "gmail_creator_name_step_missing", failureReason: "signup_step", url: page.url() };
+      }
+      await snapshotPage(page, `after_${String(stepIndex).padStart(2, "0")}_name`, { step, stepIndex });
+      continue;
+    }
+
+    if (step === "birthday") {
+      if (!(await fillBirthdayStep(page, identity, onEvent))) {
+        const birthdayDone = await waitForManualBirthdayStep(page, onEvent);
+        if (!birthdayDone.success) return birthdayDone;
+      }
+      await snapshotPage(page, `after_${String(stepIndex).padStart(2, "0")}_birthday`, { step, stepIndex });
+      continue;
+    }
+
+    if (step === "username") {
+      const usernameDone = await runUsernameStep(page, identity, onEvent);
+      if (!usernameDone.success) return usernameDone;
+      await snapshotPage(page, `after_${String(stepIndex).padStart(2, "0")}_username`, { step, stepIndex });
+      continue;
+    }
+
+    if (step === "password") {
+      if (!(await fillPasswordStep(page, identity, onEvent))) {
+        return { success: false, error: "gmail_creator_password_step_missing", failureReason: "signup_step", url: page.url() };
+      }
+      await snapshotPage(page, `after_${String(stepIndex).padStart(2, "0")}_password`, { step, stepIndex });
+      continue;
+    }
+
+    await onEvent("gmail_creator_unknown_step_manual_required", { stepIndex, url: page.url() });
+    const unknownDone = await waitForManualProgress(page, onEvent, {
+      hint: "Bilinmeyen Google adımı çıktı. Ekrandaki alanları tarayıcıda tamamlayıp devam edin; HTML htmls klasörüne kaydedildi.",
+      detectDone: async () => {
+        const nextStep = await detectCurrentSignupStep(page);
+        return nextStep !== "unknown";
+      }
     });
-    if (!finalWait.success) return finalWait;
+    if (!unknownDone.success) return unknownDone;
   }
 
-  return { success: true, url: page.url() };
+  return {
+    success: false,
+    error: "gmail_creator_max_steps_reached",
+    failureReason: "signup_step",
+    url: page.url()
+  };
 }
 
 async function createGmailAccount({
@@ -374,7 +514,14 @@ async function createGmailAccount({
     await humanMouseMove(page);
     await humanScroll(page);
 
-    const wizard = await runSignupWizard(page, identity, onEvent);
+    const snapshotPage = createPageSnapshotter({
+      prefix: "gmail_creator",
+      runKey: profileKey || identity.username,
+      onEvent
+    });
+    await snapshotPage(page, "after_signup_open", { step: "opened" });
+
+    const wizard = await runSignupWizard(page, identity, onEvent, snapshotPage);
     if (!wizard.success) {
       return wizard;
     }
