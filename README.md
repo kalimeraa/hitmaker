@@ -495,6 +495,47 @@ Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `
 - `CLOAKBROWSER_CACHE_DIR`: Binary cache dizini.
 - `CLOAKBROWSER_AUTO_UPDATE`: CloakBrowser auto-update kontrolü.
 
+## MR Giriş REST API
+
+MR Giriş akışı hazır browser havuzu ile çalışır. Önce görünür browser'lar açılır, sonra dış sistem kullanıcı adı/şifreyi REST API ile gönderir. Email doğrulama çıkarsa kod yine REST API ile aynı job'a iletilir.
+
+```http
+GET  /api/mr-giris
+GET  /api/mr-giris/ready
+POST /api/mr-giris/browsers
+POST /api/mr-giris/login
+POST /api/mr-giris/email-code
+POST /api/mr-giris/login/:id/email-code
+```
+
+Hazır iki browser açmak:
+
+```bash
+curl -X POST http://localhost:3100/api/mr-giris/browsers \
+  -H 'Content-Type: application/json' \
+  -d '{"browserCount":2,"loginUrl":"https://mrking5018.com/auth/login"}'
+```
+
+Hazır browser'a kullanıcı adı ve şifre göndermek:
+
+```bash
+curl -X POST http://localhost:3100/api/mr-giris/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"secret"}'
+```
+
+Yanıtta dönen `id` değeri email doğrulama için kullanılabilir. Callback tarafında job id yoksa aktif job `email` ile de bulunur:
+
+```bash
+curl -X POST http://localhost:3100/api/mr-giris/email-code \
+  -H 'Content-Type: application/json' \
+  -d '{"jobId":"<job-id>","code":"123456"}'
+
+curl -X POST http://localhost:3100/api/mr-giris/email-code \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","code":"123456"}'
+```
+
 ## Task Payload
 
 Önerilen payload:

@@ -17,6 +17,7 @@ router.post("/jobs/:id/stop", asyncHandler((req, res) => siteMirrorController.st
 router.post("/:slug/reprocess", asyncHandler((req, res) => siteMirrorController.reprocess(req, res)));
 router.get("/:slug/download", asyncHandler((req, res) => siteMirrorController.download(req, res)));
 router.delete("/:slug", asyncHandler((req, res) => siteMirrorController.destroy(req, res)));
+router.get("/:slug/proxy/*", asyncHandler((req, res) => siteMirrorController.serveProxy(req, res)));
 router.use("/serve/:slug", (req, res, next) => siteMirrorController.serve(req, res, next));
 
 module.exports = router;

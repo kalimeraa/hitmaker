@@ -1,0 +1,193 @@
+{
+  "info": {
+    "_postman_id": "5b1c62d0-9f32-45d3-bd38-1a51a7f3df50",
+    "name": "Hitmaker MR Giris Public API",
+    "description": "JWT/cookie login gerektirmeden denenebilen MR giris endpointleri.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3100",
+      "type": "string"
+    },
+    {
+      "key": "loginUrl",
+      "value": "https://mrking5018.com/auth/login",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "kullanici@example.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "sifre",
+      "type": "string"
+    },
+    {
+      "key": "emailCode",
+      "value": "123456",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "MR Giris",
+      "item": [
+        {
+          "name": "POST browsers - hazir browser baslat",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"browserCount\": 1,\n  \"loginUrl\": \"{{loginUrl}}\",\n  \"proxyUrl\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mr-giris/browsers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mr-giris",
+                "browsers"
+              ]
+            },
+            "description": "Hazir MR browser kuyruğa alır. Auth token/cookie gerektirmez."
+          },
+          "response": []
+        },
+        {
+          "name": "POST login - credential gonder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const data = pm.response.json();",
+                  "  const id = data.id || data._id;",
+                  "  if (id) pm.collectionVariables.set('jobId', id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"loginUrl\": \"{{loginUrl}}\",\n  \"proxyUrl\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mr-giris/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mr-giris",
+                "login"
+              ]
+            },
+            "description": "Hazir warmup browser'a credential gönderir. Hazir browser yoksa yeni warmup job olusturup credential baglar. Auth token/cookie gerektirmez."
+          },
+          "response": []
+        },
+        {
+          "name": "POST email-code - jobId ile kod gonder",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"code\": \"{{emailCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mr-giris/email-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mr-giris",
+                "email-code"
+              ]
+            },
+            "description": "Calisan MR login job'ina email dogrulama kodu gönderir. Auth token/cookie gerektirmez."
+          },
+          "response": []
+        },
+        {
+          "name": "POST email-code - email ile kod gonder",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{emailCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/mr-giris/email-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "mr-giris",
+                "email-code"
+              ]
+            },
+            "description": "jobId bilinmiyorsa aktif running job email ile bulunur. Auth token/cookie gerektirmez."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

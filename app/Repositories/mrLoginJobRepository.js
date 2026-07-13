@@ -9,6 +9,13 @@ class MrLoginJobRepository {
     return MrLoginJob.findById(id);
   }
 
+  findActiveByEmail(email) {
+    return MrLoginJob.findOne({
+      email: String(email || "").trim(),
+      status: "running"
+    }).sort({ updatedAt: -1 });
+  }
+
   create(payload) {
     return MrLoginJob.create(payload);
   }

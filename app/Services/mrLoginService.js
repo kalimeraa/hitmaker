@@ -4,11 +4,13 @@ const realtimeEventService = require("./realtimeEventService");
 const { logger } = require("./logService");
 const {
   validateCredentialPayload,
+  validateEmailCodePayload,
   validateLaunchPayload,
   validateWarmupPayload
 } = require("../Validators/mrLoginValidator");
 const { runMrKingLogin } = require("../Automation/mrKingLogin");
 const { HttpError } = require("../Utils/httpError");
+const { resolveMrLoginActionRequired } = require("../Domain/mrLoginJobState");
 
 function maskSecret(value) {
   const text = String(value || "");
@@ -19,8 +21,12 @@ function maskSecret(value) {
 
 function publicJob(job) {
   const json = typeof job.toJSON === "function" ? job.toJSON() : job;
+  const actionRequired = resolveMrLoginActionRequired(json);
   return {
     ...json,
+    actionRequired,
+    needsCredentials: actionRequired === "credentials",
+    needsEmailCode: actionRequired === "email_code",
     password: undefined,
     emailAuthCode: undefined,
     maskedPassword: maskSecret(json.password),
@@ -52,6 +58,13 @@ class MrLoginService {
   async listJobs() {
     const jobs = await this.repository.findRecent();
     return jobs.map(publicJob);
+  }
+
+  async listReadyJobs() {
+    const jobs = await this.repository.findRecent(50);
+    return jobs
+      .filter((job) => job.mode === "warmup" && job.status === "ready")
+      .map(publicJob);
   }
 
   async launch(payload) {
@@ -202,20 +215,57 @@ class MrLoginService {
     return this.repository.appendLog(jobId, { event, message, meta });
   }
 
-  async submitEmailCode(jobId, payload = {}) {
-    const code = String(payload.code || "").trim();
-    if (!code) {
-      throw new HttpError(422, "Email doğrulama kodu gerekli");
+  async resolveEmailCodeJob(options) {
+    if (options.jobId) {
+      return this.repository.findById(options.jobId);
     }
 
-    const job = await this.repository.submitEmailAuthCode(jobId, code);
+    return this.repository.findActiveByEmail(options.email);
+  }
+
+  async submitEmailCode(jobId, payload = {}) {
+    const options = validateEmailCodePayload(payload, jobId);
+    const target = await this.resolveEmailCodeJob(options);
+    if (!target) return null;
+    if (target.status !== "running") {
+      throw new HttpError(409, "Email doğrulama kodu sadece çalışan MR login job için gönderilebilir");
+    }
+
+    const targetJobId = target._id;
+    const job = await this.repository.submitEmailAuthCode(targetJobId, options.code);
     if (!job) return null;
 
-    await this.addLog(jobId, "mr_login_email_auth_code_received", "Email doğrulama kodu panelden alındı.");
+    const logged = await this.addLog(targetJobId, "mr_login_email_auth_code_received", "Email doğrulama kodu REST API üzerinden alındı.", {
+      email: job.email
+    });
     await realtimeEventService.publish("mrLogin.updated", {
       action: "email_code_received",
-      jobId: String(jobId)
+      jobId: String(targetJobId)
     });
+    return publicJob(logged || job);
+  }
+
+  async proxyLogin(payload = {}) {
+    const options = validateLaunchPayload(payload);
+    const job = await this.repository.create({
+      mode: "direct",
+      email: options.email,
+      password: options.password,
+      loginUrl: options.loginUrl,
+      profileKey: `mr-proxy-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      status: "queued",
+      logs: [{
+        at: new Date(),
+        event: "mr_login_proxy_queued",
+        message: "MR proxy login job kuyruğa alındı.",
+        meta: { email: options.email, loginUrl: options.loginUrl, source: "proxy" }
+      }]
+    });
+
+    await this.jobService.enqueue(job._id);
+    await realtimeEventService.publish("mrLogin.updated", { action: "proxy_queued", jobId: String(job._id) });
+    logger.info("mr_login_proxy_job_queued", { jobId: String(job._id), email: options.email });
+
     return publicJob(job);
   }
 

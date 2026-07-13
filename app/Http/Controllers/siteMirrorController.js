@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs/promises");
+const path = require("path");
 const siteMirrorService = require("../../Services/siteMirrorService");
 const siteMirrorJobService = require("../../Services/siteMirrorJobService");
 
@@ -91,6 +93,42 @@ class SiteMirrorController {
     }
 
     express.static(dir)(req, res, next);
+  }
+
+  // Mirror'ı proxy mode'da sun: HTML dosyalarına mr-login-proxy.js enjekte eder.
+  async serveProxy(req, res) {
+    const dir = siteMirrorService.resolveSiteDir(req.params.slug);
+    if (!dir) {
+      res.status(404).send("Mirror bulunamadı");
+      return;
+    }
+
+    const filePath = path.join(dir, req.params[0] || "");
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(dir))) {
+      res.status(403).send("Erişim reddedildi");
+      return;
+    }
+
+    try {
+      const content = await fs.readFile(resolved, "utf8");
+      const isHtml = /<html[\s>]/i.test(content) || /\.html$/i.test(req.params[0] || "");
+      if (!isHtml) {
+        res.sendFile(resolved);
+        return;
+      }
+
+      const proxyScriptTag = '<script src="/mr-login-proxy.js" data-mr-proxy="1"></script>';
+      const modified = content.replace(
+        /<\/body>/i,
+        proxyScriptTag + "\n</body>"
+      );
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(modified);
+    } catch (error) {
+      res.status(404).send("Dosya bulunamadı");
+    }
   }
 }
 
