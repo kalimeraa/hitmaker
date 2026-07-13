@@ -158,7 +158,7 @@ async function closeBlockingModals(page, onEvent, options = {}) {
     await page.waitForTimeout(700);
   }
 
-  if (!closedCount) {
+  if (!closedCount && !options.silentNoModal) {
     await onEvent("mr_login_modal_not_detected", "Kapatılacak MR popup görünmedi.");
   }
 }
@@ -209,13 +209,13 @@ async function waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCo
       await onEvent("mr_login_email_auth_not_detected", "Email doğrulama modalı görünmedi; giriş tamamlanmış görünüyor.", {
         url: page.url()
       });
-      return;
+      return false;
     }
     await page.waitForTimeout(1000).catch(() => {});
   }
   if (!isVisible) {
     await onEvent("mr_login_email_auth_not_detected", "Email doğrulama modalı görünmedi.");
-    return;
+    return false;
   }
 
   await onEvent("mr_login_email_auth_required", "Email doğrulama kodu bekleniyor; kodu panelden gir.", {
@@ -241,6 +241,10 @@ async function waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCo
       await onEvent("mr_login_email_auth_submitted", "Email doğrulama kodu gönderildi.", { url: page.url() });
       await page.waitForTimeout(5000).catch(() => {});
 
+      if (await handleSecurityWordModal(page, onEvent)) {
+        return true;
+      }
+
       if (await isEmailAuthenticationVisible(page)) {
         const authError = await detectEmailAuthError(page);
         if (authError) {
@@ -258,7 +262,7 @@ async function waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCo
       }
 
       if (await isLoginCompleted(page)) {
-        break;
+        return false;
       }
     }
     if (!authVisible) {
@@ -270,6 +274,7 @@ async function waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCo
   await onEvent("mr_login_email_auth_wait_finished", "Email doğrulama beklemesi tamamlandı.", {
     url: page.url()
   });
+  return false;
 }
 
 async function isEmailAuthenticationVisible(page) {
@@ -277,12 +282,8 @@ async function isEmailAuthenticationVisible(page) {
     await firstVisibleLocator(page, EMAIL_AUTH_INPUT_SELECTORS, 1000);
     return true;
   } catch (error) {
-    // Fall through to text detection.
+    return false;
   }
-
-  return page.locator("body").innerText({ timeout: 1000 })
-    .then((text) => /Email Authentication|E-postanıza gelen kodu giriniz|Doğrula|SPAM ve GEREKSİZ/i.test(String(text || "")))
-    .catch(() => false);
 }
 
 async function detectEmailAuthError(page) {
@@ -310,7 +311,7 @@ async function detectInvalidCredentials(page) {
 }
 
 async function handleSecurityWordModal(page, onEvent) {
-  const modal = page.locator(".app-modal__root:visible, .modal:visible, [role=\"dialog\"]:visible")
+  const modal = page.locator(".app-modal__root:visible, .modal:visible, [role=\"dialog\"]:visible, body")
     .filter({ hasText: /Size Özel Güvenli Kelimeniz|Güvenli Kelimeniz|DEVAM ET/i })
     .first();
   const hasModal = await modal.count().catch(() => 0);
@@ -324,9 +325,9 @@ async function handleSecurityWordModal(page, onEvent) {
     secureWordText: text.slice(0, 300)
   });
 
-  const continueButton = modal.locator('button:has-text("DEVAM ET"), button:has-text("Devam Et")').first();
+  const continueButton = modal.locator('button.dismiss-btn, button:has-text("DEVAM ET"), button:has-text("Devam Et")').first();
   await continueButton.click({ timeout: 10000 }).catch(async () => {
-    await page.locator('button:has-text("DEVAM ET"), button:has-text("Devam Et")').first().click({ timeout: 10000 });
+    await page.locator('button.dismiss-btn, button:has-text("DEVAM ET"), button:has-text("Devam Et")').first().click({ timeout: 10000 });
   });
   await onEvent("mr_login_security_word_continue_clicked", "Güvenli kelime modalında DEVAM ET butonuna basıldı.");
   await page.waitForTimeout(1500).catch(() => {});
@@ -430,7 +431,8 @@ async function waitForCredentials(page, onEvent, getCredentials, lastSubmittedAt
     await closeBlockingModals(page, onEvent, {
       timeoutMs: 900,
       firstPopupWaitMs: 80,
-      afterCloseQuietMs: 160
+      afterCloseQuietMs: 160,
+      silentNoModal: true
     });
     const credentials = await getCredentials();
     const submittedAt = credentials && credentials.submittedAt ? new Date(credentials.submittedAt).toISOString() : "";
@@ -483,6 +485,7 @@ async function runMrKingLogin({
     await onEvent("mr_login_browser_launching", "CloakBrowser görünür profil ile açılıyor.", { profileKey });
     context = await launchBrowserContext({
       headless: false,
+      humanize: false,
       profileKey,
       proxyUrl,
       deviceMode: "desktop"
@@ -531,9 +534,9 @@ async function runMrKingLogin({
       throw new Error("MR giriş için çok fazla hatalı credential denendi");
     }
 
-    await waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCode);
+    const securityWordConfirmedFromEmail = await waitForEmailAuthenticationIfPresent(page, onEvent, getEmailAuthCode);
     await page.waitForTimeout(3000);
-    await handleSecurityWordModal(page, onEvent);
+    const securityWordConfirmed = securityWordConfirmedFromEmail || await handleSecurityWordModal(page, onEvent);
     await page.waitForTimeout(1500);
 
     const url = page.url();
@@ -544,7 +547,7 @@ async function runMrKingLogin({
     ))).catch(() => false);
     const emailAuthVisible = await isEmailAuthenticationVisible(page);
     const hasAuthCookie = cookies.some((cookie) => /session|token|auth|jwt/i.test(cookie.name));
-    const success = !loginStillVisible && !emailAuthVisible && (!/\/auth\/login/i.test(url) || hasAuthCookie);
+    const success = securityWordConfirmed || (!loginStillVisible && !emailAuthVisible && (!/\/auth\/login/i.test(url) || hasAuthCookie));
     const visibleText = success ? "" : await collectVisibleText(page);
 
     await onEvent(success ? "mr_login_success_detected" : "mr_login_success_uncertain", success
@@ -556,6 +559,7 @@ async function runMrKingLogin({
       sessionStorageCount: storage.sessionStorage.length,
       loginStillVisible,
       emailAuthVisible,
+      securityWordConfirmed,
       visibleText
     });
     await onEvent("mr_login_final_observation", "Tarayıcı sonucu görebilmen için kısa süre açık tutuluyor.", { url });

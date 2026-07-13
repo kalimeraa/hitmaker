@@ -10,6 +10,7 @@
     "dev": "node server.js",
     "start": "node server.js",
     "worker": "node worker.js",
+    "mr-worker": "node mrLoginWorker.js",
     "browser:install": "cloakbrowser install",
     "browser:info": "cloakbrowser info"
   },

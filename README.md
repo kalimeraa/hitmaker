@@ -476,6 +476,7 @@ Dış Redis/Mongo servisleri kullanılacaksa `REDIS_URL`, `REDIS_PRIVATE_URL`, `
 - `AUTH_JWT_SECRET`: Panel JWT token imzası için secret.
 - `AUTH_JWT_TTL_SECONDS`: Panel JWT token geçerlilik süresi. Varsayılan `43200`.
 - `MAX_PARALLEL_BROWSERS`: Aynı job içinde kaç browser context paralel çalışacak.
+- `MR_LOGIN_MAX_BROWSERS`: MR Giriş hazır browser havuzunda aynı anda kaç browser çalışacak. Varsayılan `2`.
 - `TASK_TIMEOUT_MS`: Sayfa aksiyonları için timeout. Maksimum `60000` ms olarak sınırlandırılır.
 - `GOOGLE_MAX_RESULT_PAGES`: Hedef domain bulunana kadar kaç Google sonuç sayfası gezileceği. Varsayılan `10`.
 - `GOOGLE_SEARCH_HL`: Google arama arayüz dili. Varsayılan `tr`.

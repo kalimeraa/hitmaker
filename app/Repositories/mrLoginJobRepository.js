@@ -61,6 +61,7 @@ class MrLoginJobRepository {
 
   submitCredentials(id, payload = {}) {
     return this.update(id, {
+      status: "running",
       email: String(payload.email || "").trim(),
       password: String(payload.password || ""),
       credentialsSubmittedAt: new Date(),

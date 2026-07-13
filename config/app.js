@@ -71,6 +71,7 @@ module.exports = {
     jwtTtlSeconds: Number(process.env.AUTH_JWT_TTL_SECONDS || 60 * 60 * 12)
   },
   maxParallelBrowsers: Number(process.env.MAX_PARALLEL_BROWSERS || (cloakBrowserPersistentProfile ? 1 : 4)),
+  mrLoginMaxBrowsers: Number(process.env.MR_LOGIN_MAX_BROWSERS || 2),
   taskTimeoutMs: Math.min(
     Number.isFinite(configuredTaskTimeoutMs) && configuredTaskTimeoutMs > 0 ? configuredTaskTimeoutMs : maxTaskTimeoutMs,
     maxTaskTimeoutMs

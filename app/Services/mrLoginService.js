@@ -223,7 +223,7 @@ class MrLoginService {
     const credentials = validateCredentialPayload(payload);
     const options = validateWarmupPayload(payload);
     const readyJobs = await this.repository.findRecent(50);
-    const job = readyJobs.find((item) => item.mode === "warmup" && ["ready", "running"].includes(item.status));
+    const job = readyJobs.find((item) => item.mode === "warmup" && item.status === "ready");
 
     if (!job) {
       const created = await this.createWarmupJob(options, 1, credentials);

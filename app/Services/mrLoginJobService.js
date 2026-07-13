@@ -1,7 +1,7 @@
-const { browserQueue } = require("../../bootstrap/queue");
+const { mrLoginQueue } = require("../../bootstrap/queue");
 
 class MrLoginJobService {
-  constructor(queue = browserQueue) {
+  constructor(queue = mrLoginQueue) {
     this.queue = queue;
   }
 

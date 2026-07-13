@@ -23,6 +23,17 @@ services:
       - redis
       - mongo
 
+  mr-worker:
+    build: .
+    command: npm run mr-worker
+    env_file:
+      - .env
+    tmpfs:
+      - /tmp:size=512m
+    depends_on:
+      - redis
+      - mongo
+
   redis:
     image: redis:7-alpine
 

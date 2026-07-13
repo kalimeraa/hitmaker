@@ -74,7 +74,7 @@ async function anonymizeProxyIfNeeded(proxyUrl) {
   };
 }
 
-function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyGeoip = true }) {
+function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyGeoip = true, humanize }) {
   const isMobile = deviceMode === "mobile";
   const shouldUseProxyGeoip = Boolean(proxyUrl && proxyGeoip && cloakBrowser.geoip);
   const platformArgs = process.platform === "linux" ? DEFAULT_CHROMIUM_ARGS : [];
@@ -84,7 +84,7 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyG
 
   const launchOptions = {
     headless,
-    humanize: cloakBrowser.humanize,
+    humanize: typeof humanize === "boolean" ? humanize : cloakBrowser.humanize,
     viewport: isMobile ? MOBILE_VIEWPORT : (headless ? DEFAULT_VIEWPORT : null)
   };
 
@@ -121,7 +121,7 @@ function buildLaunchOptions({ headless, proxyUrl, deviceMode = "desktop", proxyG
     launchOptions.proxy = proxyUrl;
     launchOptions.geoip = shouldUseProxyGeoip;
   }
-  if (cloakBrowser.humanPreset && cloakBrowser.humanPreset !== "default") {
+  if (launchOptions.humanize && cloakBrowser.humanPreset && cloakBrowser.humanPreset !== "default") {
     launchOptions.humanPreset = cloakBrowser.humanPreset;
   }
   if (args.length) {

@@ -64,6 +64,7 @@ ensure_port() {
 cleanup() {
   if [[ -n "${APP_PID:-}" ]]; then kill "$APP_PID" >/dev/null 2>&1 || true; fi
   if [[ -n "${WORKER_PID:-}" ]]; then kill "$WORKER_PID" >/dev/null 2>&1 || true; fi
+  if [[ -n "${MR_WORKER_PID:-}" ]]; then kill "$MR_WORKER_PID" >/dev/null 2>&1 || true; fi
 }
 
 trap cleanup EXIT INT TERM
@@ -81,7 +82,8 @@ export MONGODB_URI="$MONGO_URI"
 export REDIS_HOST="$REDIS_HOST"
 export REDIS_PORT="$REDIS_PORT"
 export HEADLESS_DEFAULT="${HEADLESS_DEFAULT:-false}"
-export MAX_PARALLEL_BROWSERS="${MAX_PARALLEL_BROWSERS:-2}"
+export MAX_PARALLEL_BROWSERS="${MAX_PARALLEL_BROWSERS:-1}"
+export MR_LOGIN_MAX_BROWSERS="${MR_LOGIN_MAX_BROWSERS:-2}"
 export GOOGLE_MAX_RESULT_PAGES="${GOOGLE_MAX_RESULT_PAGES:-10}"
 export GOOGLE_SEARCH_HL="${GOOGLE_SEARCH_HL:-tr}"
 export GOOGLE_SEARCH_GL="${GOOGLE_SEARCH_GL:-tr}"
@@ -102,6 +104,9 @@ APP_PID="$!"
 npm run worker &
 WORKER_PID="$!"
 
-while kill -0 "$APP_PID" >/dev/null 2>&1 && kill -0 "$WORKER_PID" >/dev/null 2>&1; do
+npm run mr-worker &
+MR_WORKER_PID="$!"
+
+while kill -0 "$APP_PID" >/dev/null 2>&1 && kill -0 "$WORKER_PID" >/dev/null 2>&1 && kill -0 "$MR_WORKER_PID" >/dev/null 2>&1; do
   sleep 1
 done

@@ -1,5 +1,5 @@
 const { Worker } = require("bullmq");
-const { maxParallelBrowsers, redis, queueName } = require("./config/app");
+const { redis, queueName } = require("./config/app");
 const { connectDb } = require("./bootstrap/database");
 const taskProcessorService = require("./app/Services/taskProcessorService");
 const { logger } = require("./app/Services/logService");
@@ -9,7 +9,7 @@ async function main() {
 
   const worker = new Worker(queueName, (job) => taskProcessorService.process(job), {
     connection: redis,
-    concurrency: Math.max(1, Number(maxParallelBrowsers) || 1)
+    concurrency: 1
   });
 
   worker.on("completed", (job) => {
