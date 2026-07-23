@@ -355,13 +355,53 @@ async function readLocatorValue(locator) {
   return locator.inputValue({ timeout: 1000 }).catch(() => "");
 }
 
+async function isLocatorDisabled(locator) {
+  return locator.evaluate((element) => (
+    Boolean(
+      element.disabled ||
+      element.readOnly ||
+      element.getAttribute("aria-disabled") === "true" ||
+      element.classList.contains("disabled")
+    )
+  )).catch(() => false);
+}
+
+async function waitForEnabledLocator(page, selectors, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  let locator = null;
+
+  while (Date.now() < deadline) {
+    locator = await firstVisibleLocator(page, selectors, 1200);
+    if (!await isLocatorDisabled(locator)) return locator;
+    await page.waitForTimeout(300).catch(() => {});
+  }
+
+  return locator || firstVisibleLocator(page, selectors, 1200);
+}
+
+async function triggerFieldEvents(locator) {
+  await locator.evaluate((element) => {
+    for (const eventName of ["input", "change", "blur"]) {
+      element.dispatchEvent(new Event(eventName, { bubbles: true }));
+    }
+  }).catch(() => {});
+}
+
+async function replaceInputValue(locator, value) {
+  await locator.click({ timeout: 5000 });
+  await locator.press(process.platform === "darwin" ? "Meta+A" : "Control+A").catch(() => {});
+  await locator.press("Backspace").catch(() => {});
+  await locator.pressSequentially(String(value || ""), { delay: 35 });
+  await triggerFieldEvents(locator);
+}
+
 async function fillLoginForm(page, email, password, onEvent) {
-  const emailInput = await firstVisibleLocator(page, EMAIL_SELECTORS, 15000);
-  await emailInput.fill(email);
+  const emailInput = await waitForEnabledLocator(page, EMAIL_SELECTORS, 15000);
+  await replaceInputValue(emailInput, email);
   await onEvent("mr_login_email_filled", "Email / kullanıcı adı girildi.", { email });
 
-  const passwordInput = await firstVisibleLocator(page, PASSWORD_SELECTORS, 15000);
-  await passwordInput.fill(password);
+  const passwordInput = await waitForEnabledLocator(page, PASSWORD_SELECTORS, 15000);
+  await replaceInputValue(passwordInput, password);
   await onEvent("mr_login_password_filled", "Şifre girildi.");
 
   await page.waitForTimeout(400).catch(() => {});
@@ -384,6 +424,52 @@ async function fillLoginForm(page, email, password, onEvent) {
   }
 }
 
+async function getSubmitButtonState(page, timeoutMs = 15000) {
+  const submitButton = await firstVisibleLocator(page, SUBMIT_SELECTORS, timeoutMs);
+  const state = await submitButton.evaluate((button) => ({
+    isDisabled: Boolean(button.disabled || button.getAttribute("aria-disabled") === "true" || button.classList.contains("disabled")),
+    text: String(button.textContent || "").replace(/\s+/g, " ").trim()
+  })).catch(() => ({ isDisabled: false, text: "" }));
+
+  return { submitButton, ...state };
+}
+
+async function nudgePasswordValidation(page, password, onEvent) {
+  if (!password) return;
+
+  const passwordInput = await waitForEnabledLocator(page, PASSWORD_SELECTORS, 3000);
+  await passwordInput.click({ timeout: 3000 });
+  await passwordInput.press("Backspace").catch(() => {});
+  await page.waitForTimeout(150).catch(() => {});
+  await passwordInput.pressSequentially(password.slice(-1), { delay: 35 });
+  await triggerFieldEvents(passwordInput);
+  await onEvent("mr_login_password_validation_nudged", "Şifre alanı validasyonu yeniden tetiklendi.");
+}
+
+async function waitForSubmitEnabled(page, password, onEvent, timeoutMs = 7000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+  let nudged = false;
+
+  while (Date.now() < deadline) {
+    lastState = await getSubmitButtonState(page, 1200);
+    if (!lastState.isDisabled) return lastState.submitButton;
+
+    if (!nudged) {
+      nudged = true;
+      await nudgePasswordValidation(page, password, onEvent).catch((error) => (
+        onEvent("mr_login_password_validation_nudge_failed", "Şifre alanı validasyonu yeniden tetiklenemedi.", {
+          error: error.message || "unknown_error"
+        })
+      ));
+    }
+
+    await page.waitForTimeout(300).catch(() => {});
+  }
+
+  return (lastState && lastState.submitButton) || firstVisibleLocator(page, SUBMIT_SELECTORS, 1200);
+}
+
 async function tryFillLoginForm(page, email, password, onEvent) {
   try {
     await fillLoginForm(page, email, password, onEvent);
@@ -396,15 +482,14 @@ async function tryFillLoginForm(page, email, password, onEvent) {
   }
 }
 
-async function clickSubmitButton(page, onEvent) {
-  const submitButton = await firstVisibleLocator(page, SUBMIT_SELECTORS, 15000);
-  const isDisabled = await submitButton.evaluate((button) => (
-    Boolean(button.disabled || button.getAttribute("aria-disabled") === "true" || button.classList.contains("disabled"))
-  )).catch(() => false);
+async function clickSubmitButton(page, password, onEvent) {
+  const submitButton = await waitForSubmitEnabled(page, password, onEvent);
+  const { isDisabled } = await getSubmitButtonState(page, 1200);
 
   await onEvent("mr_login_submit_button_checked", "Hemen Giriş Yap butonu kontrol edildi.", { isDisabled });
 
   if (isDisabled) {
+    await captureDebugArtifact(page, onEvent, "submit-disabled");
     throw new Error("MR login submit butonu pasif; email/şifre formu dolu değil");
   }
 
@@ -447,7 +532,7 @@ async function waitForCredentials(page, onEvent, getCredentials, lastSubmittedAt
 
 async function attemptLogin(page, credentials, onEvent) {
   await prepareLoginForm(page, credentials.email, credentials.password, onEvent);
-  await clickSubmitButton(page, onEvent);
+  await clickSubmitButton(page, credentials.password, onEvent);
   await onEvent("mr_login_submit_clicked", "Hemen Giriş Yap butonuna tıklandı.", { url: page.url() });
   await captureDebugArtifact(page, onEvent, "after-submit-click");
 

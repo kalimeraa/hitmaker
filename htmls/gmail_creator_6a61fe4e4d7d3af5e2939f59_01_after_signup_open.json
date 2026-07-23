@@ -1,0 +1,81 @@
+{
+  "label": "after_signup_open",
+  "url": "https://accounts.google.com/lifecycle/steps/signup/name?dsh=S-1105433342:1784807173363351&flowEntry=SignUp&flowName=GlifWebSignIn&TL=AE6Fvya9i6yvBHdUih_hdOUU3p2oXr-cJbXYCjp4VWyC0m18BBd3JLzDQcJrylqN&continue=https://accounts.google.com/ManageAccount?nc%3D1",
+  "title": "Create your Google Account",
+  "fields": [
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "firstName",
+      "id": "firstName",
+      "ariaLabel": "First name",
+      "autocomplete": "on",
+      "placeholder": "",
+      "value": "",
+      "maxLength": ""
+    },
+    {
+      "tag": "input",
+      "type": "text",
+      "name": "lastName",
+      "id": "lastName",
+      "ariaLabel": "Last name (optional)",
+      "autocomplete": "on",
+      "placeholder": "",
+      "value": "",
+      "maxLength": ""
+    }
+  ],
+  "interactive": [
+    {
+      "tag": "button",
+      "role": "",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Next"
+    },
+    {
+      "tag": "div",
+      "role": "combobox",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "i5",
+      "dataValue": "",
+      "text": "English (United States)"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Open Google Account Help Center (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Help"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Privacy Policy (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Privacy"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Google Terms of Service (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Terms"
+    }
+  ],
+  "visibleText": "Loading Create a Google Account Enter your name First name Last name (optional) Next English (United States) Help Privacy Terms",
+  "step": "opened",
+  "savedAt": "2026-07-23T11:46:23.491Z",
+  "htmlFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_01_after_signup_open.html",
+  "jsonFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_01_after_signup_open.json"
+}

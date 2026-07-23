@@ -11,6 +11,10 @@ const {
 const { runMrKingLogin } = require("../Automation/mrKingLogin");
 const { HttpError } = require("../Utils/httpError");
 const { resolveMrLoginActionRequired } = require("../Domain/mrLoginJobState");
+const { resolveMrLoginCredentialOutcome } = require("../Domain/mrLoginCredentialOutcome");
+
+const CREDENTIAL_OUTCOME_TIMEOUT_MS = 45000;
+const CREDENTIAL_OUTCOME_POLL_MS = 500;
 
 function maskSecret(value) {
   const text = String(value || "");
@@ -46,6 +50,20 @@ function publicJob(job) {
       }))
     }
   };
+}
+
+function loginResponse(job, message) {
+  return {
+    ok: true,
+    message,
+    ...publicJob(job)
+  };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 class MrLoginService {
@@ -273,7 +291,12 @@ class MrLoginService {
     const credentials = validateCredentialPayload(payload);
     const options = validateWarmupPayload(payload);
     const readyJobs = await this.repository.findRecent(50);
-    const job = readyJobs.find((item) => item.mode === "warmup" && item.status === "ready");
+    const job = readyJobs.find((item) => (
+      item.mode === "warmup" && (
+        item.status === "ready" ||
+        resolveMrLoginActionRequired(item) === "credentials"
+      )
+    ));
 
     if (!job) {
       const created = await this.createWarmupJob(options, 1, credentials);
@@ -284,7 +307,7 @@ class MrLoginService {
         action: "credentials_queued_with_warmup",
         jobId: String(created._id)
       });
-      return publicJob(created);
+      return this.waitForCredentialOutcome(created._id, created.credentialsSubmittedAt);
     }
 
     const updated = await this.repository.submitCredentials(job._id, credentials);
@@ -295,7 +318,43 @@ class MrLoginService {
       action: "credentials_received",
       jobId: String(job._id)
     });
-    return publicJob(updated);
+    return this.waitForCredentialOutcome(job._id, updated.credentialsSubmittedAt);
+  }
+
+  async waitForCredentialOutcome(jobId, credentialsSubmittedAt) {
+    const deadline = Date.now() + CREDENTIAL_OUTCOME_TIMEOUT_MS;
+    let latest = null;
+
+    while (Date.now() < deadline) {
+      latest = await this.repository.findById(jobId);
+      const outcome = resolveMrLoginCredentialOutcome(latest, credentialsSubmittedAt);
+
+      if (outcome.type === "missing") {
+        throw new HttpError(404, "MR login job not found");
+      }
+
+      if (outcome.type === "invalid_credentials") {
+        throw new HttpError(401, "Girdiğiniz bilgiler hatalı; kontrol edip tekrar deneyiniz.");
+      }
+
+      if (outcome.type === "failed") {
+        throw new HttpError(400, outcome.error);
+      }
+
+      if (outcome.type === "email_code_required") {
+        return loginResponse(latest, "Giriş yaptınız. Email doğrulama kodu gerekli.");
+      }
+
+      if (outcome.type === "completed") {
+        return loginResponse(latest, "Giriş yaptınız.");
+      }
+
+      await delay(CREDENTIAL_OUTCOME_POLL_MS);
+    }
+
+    latest = latest || await this.repository.findById(jobId);
+    if (!latest) throw new HttpError(404, "MR login job not found");
+    return publicJob(latest);
   }
 }
 

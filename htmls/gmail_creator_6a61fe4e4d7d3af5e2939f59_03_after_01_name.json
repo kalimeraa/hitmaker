@@ -1,0 +1,109 @@
+{
+  "label": "after_01_name",
+  "url": "https://accounts.google.com/lifecycle/steps/signup/birthdaygender?TL=AE6Fvya9i6yvBHdUih_hdOUU3p2oXr-cJbXYCjp4VWyC0m18BBd3JLzDQcJrylqN&continue=https%3A%2F%2Faccounts.google.com%2FManageAccount%3Fnc%3D1&dsh=S-1105433342%3A1784807173363351&flowEntry=SignUp&flowName=GlifWebSignIn",
+  "title": "Basic information Enter your birthday and gender",
+  "fields": [
+    {
+      "tag": "input",
+      "type": "tel",
+      "name": "day",
+      "id": "day",
+      "ariaLabel": "Day",
+      "autocomplete": "off",
+      "placeholder": "",
+      "value": "",
+      "maxLength": "2"
+    },
+    {
+      "tag": "input",
+      "type": "tel",
+      "name": "year",
+      "id": "year",
+      "ariaLabel": "Year",
+      "autocomplete": "off",
+      "placeholder": "",
+      "value": "",
+      "maxLength": "4"
+    }
+  ],
+  "interactive": [
+    {
+      "tag": "div",
+      "role": "combobox",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "c6",
+      "dataValue": "",
+      "text": "Month"
+    },
+    {
+      "tag": "div",
+      "role": "combobox",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "c12",
+      "dataValue": "",
+      "text": "Gender"
+    },
+    {
+      "tag": "button",
+      "role": "link",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Why we ask for your birthday and gender"
+    },
+    {
+      "tag": "button",
+      "role": "",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Next"
+    },
+    {
+      "tag": "div",
+      "role": "combobox",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "i5",
+      "dataValue": "",
+      "text": "English (United States)"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Open Google Account Help Center (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Help"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Privacy Policy (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Privacy"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Google Terms of Service (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Terms"
+    }
+  ],
+  "visibleText": "Loading Basic information Enter your birthday and gender Month Day Year Gender Why we ask for your birthday and gender Next English (United States) Help Privacy Terms Basic information Enter your birthday and gender",
+  "step": "name",
+  "stepIndex": 1,
+  "savedAt": "2026-07-23T11:47:20.863Z",
+  "htmlFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_03_after_01_name.html",
+  "jsonFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_03_after_01_name.json"
+}

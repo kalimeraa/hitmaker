@@ -1,0 +1,102 @@
+{
+  "label": "after_02_birthday",
+  "url": "https://accounts.google.com/lifecycle/steps/signup/username?TL=AE6Fvya9i6yvBHdUih_hdOUU3p2oXr-cJbXYCjp4VWyC0m18BBd3JLzDQcJrylqN&continue=https%3A%2F%2Faccounts.google.com%2FManageAccount%3Fnc%3D1&dsh=S-1105433342%3A1784807173363351&flowEntry=SignUp&flowName=GlifWebSignIn",
+  "title": "Create an email address Create a Gmail address for signing in to your Google Account",
+  "fields": [
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "usernameRadio",
+      "id": "",
+      "ariaLabel": "",
+      "autocomplete": "",
+      "placeholder": "",
+      "value": "sonmezdorku",
+      "maxLength": ""
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "usernameRadio",
+      "id": "",
+      "ariaLabel": "",
+      "autocomplete": "",
+      "placeholder": "",
+      "value": "dorkusonmez",
+      "maxLength": ""
+    },
+    {
+      "tag": "input",
+      "type": "radio",
+      "name": "usernameRadio",
+      "id": "",
+      "ariaLabel": "",
+      "autocomplete": "",
+      "placeholder": "",
+      "value": "custom",
+      "maxLength": ""
+    }
+  ],
+  "interactive": [
+    {
+      "tag": "button",
+      "role": "",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Next"
+    },
+    {
+      "tag": "button",
+      "role": "",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Use your existing email"
+    },
+    {
+      "tag": "div",
+      "role": "combobox",
+      "id": "",
+      "ariaLabel": "",
+      "ariaControls": "i5",
+      "dataValue": "",
+      "text": "English (United States)"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Open Google Account Help Center (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Help"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Privacy Policy (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Privacy"
+    },
+    {
+      "tag": "a",
+      "role": "",
+      "id": "",
+      "ariaLabel": "Google Terms of Service (external, opens in a new window)",
+      "ariaControls": "",
+      "dataValue": "",
+      "text": "Terms"
+    }
+  ],
+  "visibleText": "Loading Create an email address Create a Gmail address for signing in to your Google Account sonmezdorku@gmail.com dorkusonmez@gmail.com Create your own Gmail address Next Use your existing email English (United States) Help Privacy Terms Create an email address Create a Gmail address for signing in to your Google Account Maximum of 4 characters entered",
+  "step": "birthday",
+  "stepIndex": 2,
+  "savedAt": "2026-07-23T11:47:55.803Z",
+  "htmlFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_05_after_02_birthday.html",
+  "jsonFile": "gmail_creator_6a61fe4e4d7d3af5e2939f59_05_after_02_birthday.json"
+}

@@ -38,7 +38,28 @@ Hazır browser'a kullanıcı adı/şifre gönderir. Hazır browser yoksa yeni wa
 }
 ```
 
-Başarılı cevap job objesi döner. Postman collection, dönen `id` veya `_id` değerini `jobId` değişkenine yazar.
+Başarılı credential kabulünde `200` döner. Email doğrulama gerekiyorsa response şu şekilde gelir:
+
+```json
+{
+  "ok": true,
+  "message": "Giriş yaptınız. Email doğrulama kodu gerekli.",
+  "status": "running",
+  "actionRequired": "email_code",
+  "needsEmailCode": true
+}
+```
+
+Email doğrulama gerekmeyip giriş tamamlanırsa `message` değeri `Giriş yaptınız.` olur. Postman collection, dönen `id` veya `_id` değerini `jobId` değişkenine yazar.
+
+Credential hatalıysa endpoint browser sonucunu bekleyip `401` döner:
+
+```json
+{
+  "error": "Girdiğiniz bilgiler hatalı; kontrol edip tekrar deneyiniz.",
+  "statusCode": 401
+}
+```
 
 ### POST `/api/mr-giris/email-code`
 
