@@ -444,12 +444,15 @@ async function mirrorSite(options = {}) {
   const documents = new Map();
   const urlToRel = new Map();
   const counters = { assets: 0, bytes: 0, writtenRels: new Set() };
+  const pendingCaptures = new Set();
   const ctx = { store, urlToRel, counters, outDir, maxAssetBytes, stripTracking, onEvent };
 
   await onEvent("site_mirror_context_start", { url: startUrl, headless, proxied: Boolean(proxyUrl) });
   const context = await launchBrowserContext({ headless, deviceMode, proxyUrl });
   context.on("response", (response) => {
-    captureAndSaveResponse(response, ctx).catch(() => {});
+    const pending = captureAndSaveResponse(response, ctx).catch(() => {});
+    pendingCaptures.add(pending);
+    pending.finally(() => pendingCaptures.delete(pending)).catch(() => {});
   });
 
   const visited = new Set();
@@ -519,6 +522,7 @@ async function mirrorSite(options = {}) {
 
     // Geç gelen response'lar diske düşsün diye kısa bir soluk.
     await sleep(600);
+    while (pendingCaptures.size) await Promise.all(Array.from(pendingCaptures));
     const summary = await finalizeMirror({ outDir, host: rootHost, store, documents, urlToRel, counters, stripTracking, onEvent });
     await reportProgress({ phase: control.stop ? "stopped" : "completed" });
 
