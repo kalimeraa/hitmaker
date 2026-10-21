@@ -24,6 +24,8 @@ operation. Production Redis deployments should use the upstream Linux guidance.
 Build/source: https://github.com/redis-windows/redis-windows/tree/7.2.8
 Redis source and license: https://github.com/redis/redis/tree/7.2.8
 Cygwin runtime and source: https://cygwin.com/
+The bundled runtime/etc/fstab uses noacl so new Redis data inherits the private
+Windows DACL instead of Cygwin synthesizing POSIX permissions.
 OpenSSL source and licenses: https://openssl-library.org/source/
 The build port's repository license does not replace individual runtime licenses.
 

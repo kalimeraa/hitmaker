@@ -105,3 +105,9 @@ do not describe cross compilation as a successful Windows installation.
   wrappers as well as the promoted version so the nonempty-directory guard does
   not prevent retry. Native CI forces a missing-browser failure using only its
   synthetic retained data/config, checks rollback, restores config and retries.
+- Native panel/browser login and restart/data persistence pass. Upgrade stops at
+  the strict data audit because Cygwin rewrites Redis AOF directory DACLs. Use a
+  bundled runtime/etc/fstab with documented noacl cygdrive options, preserving
+  Windows ACL inheritance. The strict audit stays enabled for every upgrade and
+  uninstall. References: https://cygwin.com/cygwin-ug-net/using-filemodes.html and
+  https://cygwin.com/cygwin-ug-net/using-specialnames.html.

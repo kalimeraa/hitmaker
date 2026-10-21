@@ -66,7 +66,7 @@ function Assert-TrustedDataTree([string]$DataRoot, [switch]$RootOnly) {
       if ($owner -notin $trusted) { throw "Persistent data has an untrusted owner: $($item.FullName)" }
       foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         if ($rule.AccessControlType -eq 'Allow' -and $rule.IdentityReference.Value -notin $trusted -and ($rule.FileSystemRights -band $writes)) {
-          throw "Persistent data permits untrusted writes: $($item.FullName)"
+          throw "Persistent data permits untrusted writes ($($rule.IdentityReference.Value): $($rule.FileSystemRights)): $($item.FullName)"
         }
       }
       if (-not $RootOnly -and $item.PSIsContainer -and $item.FullName -ne $directory) { $pending.Enqueue($item.FullName) }

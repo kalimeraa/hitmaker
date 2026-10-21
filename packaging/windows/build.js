@@ -82,6 +82,8 @@ async function build() {
   // npm's executable shims are unnecessary at runtime and may be host symlinks.
   await fs.rm(path.join(app, "node_modules/.bin"), { recursive: true, force: true });
   for (const asset of dependencies.assets) await stageAsset(asset);
+  // Cygwin locates /etc beside the directory containing cygwin1.dll (runtime/redis).
+  await copy(path.join(__dirname, "cygwin.fstab"), path.join(payload, "runtime/etc/fstab"));
   for (const name of ["install.ps1", "Installer.psm1", "runtime-launcher.js", "check-runtime.js"]) {
     await copy(path.join(__dirname, name), path.join(payload, "installer", name));
   }
