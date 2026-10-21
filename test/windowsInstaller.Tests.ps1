@@ -12,6 +12,12 @@ function Assert-Throws([scriptblock]$Action, [string]$Name) {
   Write-Output "PASS $Name"
 }
 
+$hashFixture = Join-Path ([IO.Path]::GetTempPath()) ('hitmaker-hash-' + [Guid]::NewGuid().ToString('N'))
+try {
+  [IO.File]::WriteAllText($hashFixture, 'abc', [Text.UTF8Encoding]::new($false))
+  Assert-Equal (Get-FileSha256 $hashFixture) 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' 'SHA-256 without Get-FileHash module'
+} finally { [IO.File]::Delete($hashFixture) }
+
 Assert-Equal (ConvertTo-CygwinPath 'C:\ProgramData\Hitmaker Veri\İstanbul') '/cygdrive/c/ProgramData/Hitmaker Veri/İstanbul' 'Cygwin spaces and Unicode'
 Assert-Throws { ConvertTo-CygwinPath '\\server\share' } 'UNC Redis data rejected'
 Assert-Equal (Quote-WindowsArgument 'C:\Program Files\Hitmaker\node.exe') '"C:\Program Files\Hitmaker\node.exe"' 'Windows argument spaces'

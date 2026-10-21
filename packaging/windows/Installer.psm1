@@ -1,6 +1,13 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Get-FileSha256([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+  finally { $algorithm.Dispose(); $stream.Dispose() }
+}
+
 function ConvertTo-CygwinPath([string]$Path) {
   if ($Path -notmatch '^([A-Za-z]):[\\/]') { throw 'Redis data must be on a local Windows drive.' }
   return '/cygdrive/' + $Matches[1].ToLowerInvariant() + '/' + $Path.Substring(3).Replace('\', '/')

@@ -81,3 +81,9 @@ do not describe cross compilation as a successful Windows installation.
   and produces a 286.5 MiB installer; solid LZMA produces about 202 MiB but takes
   several minutes. Use zlib for faster build/install/recovery cycles. Payload
   SHA-256 verification remains mandatory for every file.
+- Windows transcript confirmed a 64-bit Windows PowerShell 5.1 process but a
+  missing Get-FileHash command. Microsoft documents PS7 module-path inheritance
+  through intermediary executables (PowerShell issue 27774). Restrict installer
+  module lookup to its native PSHOME/Modules, and use a streaming .NET SHA-256
+  helper for payload validation. The existing native smoke test reproduces this
+  exact pwsh7 -> NSIS -> WindowsPS5 chain.

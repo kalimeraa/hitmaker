@@ -53,7 +53,7 @@ function Assert-Payload {
     if ($file.path -match '(^|[\\/])\.\.([\\/]|$)' -or [IO.Path]::IsPathRooted($file.path)) { throw 'Unsafe payload manifest path.' }
     $absolute = Join-Path $PayloadRoot $file.path
     $item = Get-Item -LiteralPath $absolute
-    if ($item.Length -ne $file.size -or (Get-FileHash -LiteralPath $absolute -Algorithm SHA256).Hash -ne $file.sha256) {
+    if ($item.Length -ne $file.size -or (Get-FileSha256 $absolute) -ne $file.sha256) {
       throw "Installer file integrity check failed: $($file.path)"
     }
   }
@@ -128,10 +128,16 @@ function Install-Services {
 }
 
 try {
+  # pwsh 7 -> NSIS -> Windows PowerShell 5.1 retains incompatible PS7 module paths.
+  # Provisioning uses only the native Windows PowerShell built-in modules.
+  $env:PSModulePath = Join-Path $PSHOME 'Modules'
   Start-Transcript -Path $BootLog -Append | Out-Null
   $Transcript = $true
   Write-Output "Preflight: 64-bit process=$([Environment]::Is64BitProcess); ProgramFiles=$([Environment]::GetFolderPath('ProgramFiles')); destination=$InstallRoot"
   Import-Module (Join-Path $PSScriptRoot 'Installer.psm1') -Force
+  foreach ($command in @('Get-CimInstance', 'Get-Acl', 'Set-Acl', 'Start-Service', 'Stop-Service')) {
+    $null = Get-Command $command -ErrorAction Stop
+  }
   Assert-Platform
   Assert-InstallDirectories $InstallRoot $DataRoot
   Assert-ProgramFilesLocation $InstallRoot ([Environment]::GetFolderPath('ProgramFiles'))
