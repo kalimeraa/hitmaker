@@ -55,18 +55,26 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $diagnostics = Join-Path $env:RUNNER_TEMP 'hitmaker-diagnostics'
+          New-Item -ItemType Directory -Force $diagnostics | Out-Null
           $bootLog = Join-Path $env:TEMP 'Hitmaker-setup.log'
           if (Test-Path $bootLog) {
             Get-Content $bootLog
-            Copy-Item $bootLog (Join-Path $env:RUNNER_TEMP 'Hitmaker-setup.log') -Force
+            Copy-Item $bootLog (Join-Path $diagnostics 'Hitmaker-setup.log') -Force
+          }
+          $serviceLogs = Join-Path $env:ProgramData 'Hitmaker/logs'
+          if (Test-Path $serviceLogs) {
+            Copy-Item $serviceLogs (Join-Path $diagnostics 'services') -Recurse -Force
+            Get-ChildItem $serviceLogs -File | Where-Object { $_.Name -match '(err|readiness)' } | ForEach-Object {
+              Write-Output "Diagnostic log: $($_.Name)"
+              Get-Content $_.FullName -Tail 60
+            }
           }
       - name: Collect installer and service logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-smoke-logs
-          path: |
-            C:/ProgramData/Hitmaker/logs/
-            ${{ runner.temp }}/Hitmaker-setup.log
+          path: ${{ runner.temp }}/hitmaker-diagnostics/
           if-no-files-found: ignore
           retention-days: 3

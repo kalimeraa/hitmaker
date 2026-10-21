@@ -201,8 +201,13 @@ try {
     Start-HitmakerServices $InstallRoot
     Push-Location $DataRoot
     try {
-      & (Join-Path $Current 'runtime\node\node.exe') (Join-Path $Current 'installer\check-runtime.js') --browser
-      if ($LASTEXITCODE -ne 0) { throw 'Hitmaker readiness check failed. See setup and service logs.' }
+      try {
+        # Windows PowerShell otherwise stops at the first native stderr line.
+        $ErrorActionPreference = 'Continue'
+        & (Join-Path $Current 'runtime\node\node.exe') (Join-Path $Current 'installer\check-runtime.js') --browser 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath (Join-Path $LogRoot 'readiness.log')
+        $runtimeExitCode = $LASTEXITCODE
+      } finally { $ErrorActionPreference = 'Stop' }
+      if ($runtimeExitCode -ne 0) { throw 'Hitmaker readiness check failed. See setup and service logs.' }
     } finally { Pop-Location }
     $version = Get-Content -LiteralPath (Join-Path $Current 'version.json') -Raw | ConvertFrom-Json
     @{ product = 'Hitmaker'; installRoot = $InstallRoot; version = $version.version } | ConvertTo-Json | Set-Content -LiteralPath $StatePath -Encoding UTF8

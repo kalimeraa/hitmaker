@@ -87,3 +87,7 @@ do not describe cross compilation as a successful Windows installation.
   module lookup to its native PSHOME/Modules, and use a streaming .NET SHA-256
   helper for payload validation. The existing native smoke test reproduces this
   exact pwsh7 -> NSIS -> WindowsPS5 chain.
+- Native setup now passes the occupied-port check and installs all five services,
+  but fails runtime readiness. Capture native stdout/stderr explicitly (transcript
+  alone misses it), and stage all CI diagnostic files on the same drive before
+  upload-artifact, which cannot use a common root across C: and D:.
