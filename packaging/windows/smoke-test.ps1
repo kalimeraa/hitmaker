@@ -56,12 +56,20 @@ try {
   Invoke-NodeCheck $stateProbe @($InstallRoot, 'read')
   Write-Output 'PASS upgrade preserves configuration, MongoDB, Redis and files'
 
-  $uninstaller = Start-Process -FilePath (Join-Path $InstallRoot 'Uninstall.exe') -ArgumentList '/S' -PassThru
+  # _?= disables NSIS's temp self-copy so this process owns the actual teardown.
+  # As with /D=, the unquoted install directory must be the final remainder.
+  $uninstaller = Start-Process -FilePath (Join-Path $InstallRoot 'Uninstall.exe') -ArgumentList "/S _?=$InstallRoot" -PassThru
   if (-not $uninstaller.WaitForExit(180000) -or $uninstaller.ExitCode -ne 0) { throw 'Uninstall failed' }
   if (@(Get-Service -Name $ServiceIds -ErrorAction SilentlyContinue).Count) { throw 'Services remain after uninstall' }
   if (-not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall deleted persistent user data' }
   if ((Get-FileHash -LiteralPath $config).Hash -ne $configHash) { throw 'Uninstall changed persistent settings' }
   Write-Output 'PASS uninstall preserves user data'
+
+  # _?= leaves the running uninstaller behind; remove only its known file/root.
+  Remove-Item -LiteralPath (Join-Path $InstallRoot 'Uninstall.exe') -Force -ErrorAction SilentlyContinue
+  if ((Test-Path -LiteralPath $InstallRoot) -and @(Get-ChildItem -LiteralPath $InstallRoot -Force).Count -eq 0) {
+    Remove-Item -LiteralPath $InstallRoot
+  }
 
   Invoke-Setup
   Invoke-NodeCheck $check @('--browser')

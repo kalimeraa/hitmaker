@@ -132,12 +132,13 @@ try {
   Assert-ProgramFilesLocation $InstallRoot ([Environment]::GetFolderPath('ProgramFiles'))
   Assert-NoReparseAncestor $InstallRoot
   Assert-NoReparseAncestor $DataRoot
-  Assert-TrustedDataTree $DataRoot
   $created = $false
   $Mutex = [Threading.Mutex]::new($false, 'Global\HitmakerInstaller', [ref]$created)
   $Locked = $Mutex.WaitOne(0)
   if (-not $Locked) { throw 'Another Hitmaker installer is running.' }
+  Assert-TrustedDataTree $DataRoot -RootOnly
   $installed = @(Get-InstalledHitmakerServices $InstallRoot)
+  $PreviousRunning = @($installed | Where-Object { $_.State -eq 'Running' } | ForEach-Object { $_.Name })
   if (Test-Path -LiteralPath $StatePath) {
     $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
     if ($state.product -ne 'Hitmaker' -or $state.installRoot -ne $InstallRoot) {
@@ -150,6 +151,8 @@ try {
   }
   if ($Action -eq 'Uninstall') {
     if (-not (Test-Path -LiteralPath $StatePath)) { throw 'Hitmaker installation record was not found.' }
+    Stop-HitmakerServices $InstallRoot
+    Assert-TrustedDataTree $DataRoot
     Remove-HitmakerServices $InstallRoot
     Remove-HitmakerVersion $Current
     Remove-HitmakerVersion $Previous
@@ -157,8 +160,8 @@ try {
     Write-Output "Hitmaker removed. Your data is preserved in $DataRoot"
   } else {
     Assert-Payload
-    $PreviousRunning = @($installed | Where-Object { $_.State -eq 'Running' } | ForEach-Object { $_.Name })
     Stop-HitmakerServices $InstallRoot
+    Assert-TrustedDataTree $DataRoot
     Assert-FreePorts
     Protect-ApplicationDirectory
     Initialize-Data

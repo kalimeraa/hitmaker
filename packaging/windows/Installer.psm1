@@ -42,7 +42,7 @@ function Assert-ProgramFilesLocation([string]$InstallRoot, [string]$ProgramFiles
   }
 }
 
-function Assert-TrustedDataTree([string]$DataRoot) {
+function Assert-TrustedDataTree([string]$DataRoot, [switch]$RootOnly) {
   if (-not (Test-Path -LiteralPath $DataRoot)) { return }
   $pending = [Collections.Generic.Queue[string]]::new()
   $pending.Enqueue($DataRoot)
@@ -50,7 +50,9 @@ function Assert-TrustedDataTree([string]$DataRoot) {
   $writes = [Security.AccessControl.FileSystemRights]'WriteData,AppendData,WriteExtendedAttributes,DeleteSubdirectoriesAndFiles,WriteAttributes,Delete,ChangePermissions,TakeOwnership'
   while ($pending.Count) {
     $directory = $pending.Dequeue()
-    foreach ($item in @((Get-Item -LiteralPath $directory -Force)) + @(Get-ChildItem -LiteralPath $directory -Force)) {
+    $items = @((Get-Item -LiteralPath $directory -Force))
+    if (-not $RootOnly) { $items += @(Get-ChildItem -LiteralPath $directory -Force) }
+    foreach ($item in $items) {
       if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Persistent data contains an unexpected reparse point: $($item.FullName)" }
       $acl = Get-Acl -LiteralPath $item.FullName
       $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
@@ -60,7 +62,7 @@ function Assert-TrustedDataTree([string]$DataRoot) {
           throw "Persistent data permits untrusted writes: $($item.FullName)"
         }
       }
-      if ($item.PSIsContainer -and $item.FullName -ne $directory) { $pending.Enqueue($item.FullName) }
+      if (-not $RootOnly -and $item.PSIsContainer -and $item.FullName -ne $directory) { $pending.Enqueue($item.FullName) }
     }
   }
 }
