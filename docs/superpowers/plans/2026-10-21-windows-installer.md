@@ -101,3 +101,7 @@ do not describe cross compilation as a successful Windows installation.
 - Panel assets previously came from Bootstrap/jQuery CDNs. Bundle the same pinned
   distributions with licenses/provenance, and block external browser requests in
   the native local-panel smoke test. Assert both libraries and app.js load.
+- Trace initial-install rollback through a readiness failure: remove owned service
+  wrappers as well as the promoted version so the nonempty-directory guard does
+  not prevent retry. Native CI forces a missing-browser failure using only its
+  synthetic retained data/config, checks rollback, restores config and retries.

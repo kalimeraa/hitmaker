@@ -230,6 +230,9 @@ try {
         if ($HadPrevious) {
           Move-Item -LiteralPath $Previous -Destination $Current
           Install-Services
+        } elseif (Test-Path -LiteralPath $Services) {
+          # A failed first install must leave an empty application root for retry.
+          Remove-Item -LiteralPath $Services -Recurse -Force
         }
       } elseif ($HadPrevious -and -not (Test-Path -LiteralPath $Current) -and (Test-Path -LiteralPath $Previous)) {
         # A failed second rename must also restore the original service paths.
