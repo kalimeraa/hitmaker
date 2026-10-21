@@ -1,0 +1,61 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/windows-installer]
+    paths: ['packaging/windows/**', 'app/**', 'views/**', 'public/**', 'config/**', 'routes/**', 'server.js', 'package*.json', 'test/**', '.github/workflows/windows-installer.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/cache@v4
+        with:
+          path: storage/installer-cache
+          key: windows-installer-${{ hashFiles('packaging/windows/dependencies.json', 'package-lock.json') }}
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run installer:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hitmaker-windows-installer
+          path: dist/windows/
+          retention-days: 3
+  windows-smoke:
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: hitmaker-windows-installer
+          path: dist/windows
+      - name: Verify installer checksum
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/windows/*Setup-x64.exe | Select-Object -First 1
+          $expected = (Get-Content ($setup.FullName + '.sha256')).Split(' ')[0]
+          if ((Get-FileHash $setup.FullName -Algorithm SHA256).Hash -ne $expected) { throw 'Installer checksum mismatch' }
+      - name: PowerShell helper regression tests
+        shell: pwsh
+        run: ./test/windowsInstaller.Tests.ps1
+      - name: Install, restart, upgrade, uninstall and reinstall
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist/windows/*Setup-x64.exe | Select-Object -First 1
+          ./packaging/windows/smoke-test.ps1 -Installer $setup.FullName
+      - name: Collect installer and service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke-logs
+          path: C:/ProgramData/Hitmaker/logs/
+          if-no-files-found: ignore
+          retention-days: 3

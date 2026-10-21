@@ -8,3 +8,4 @@ mock-sites/
 aliciacperez17x1@gmail.com.txt
 npm-debug.log*
 .DS_Store
+dist/

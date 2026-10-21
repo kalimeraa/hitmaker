@@ -1,6 +1,11 @@
 const cookiePoolService = require("../../Services/cookiePoolService");
+const cookieFileImportService = require("../../Services/cookieFileImportService");
 
 class CookiePoolController {
+  async parseFiles(req, res) {
+    res.json(await cookieFileImportService.parseCookieFiles(req.body));
+  }
+
   async index(req, res) {
     const cookies = await cookiePoolService.listCookies();
     res.json(cookies);

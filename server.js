@@ -1,4 +1,4 @@
-const { port } = require("./config/app");
+const { host, port } = require("./config/app");
 const { connectDb } = require("./bootstrap/database");
 const { queueEvents } = require("./bootstrap/queue");
 const { createApp } = require("./app");
@@ -8,7 +8,7 @@ async function main() {
   await connectDb();
   await queueEvents.waitUntilReady();
   const app = createApp();
-  app.listen(port, () => {
+  app.listen(port, host, () => {
     logger.info("server_started", { url: `http://localhost:${port}` });
   });
 }

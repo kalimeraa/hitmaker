@@ -1,0 +1,72 @@
+# Hitmaker Windows installer
+
+The approved deliverable is one Windows x64 setup executable with a wizard,
+automatic services, a panel shortcut and a Windows uninstall entry. The existing
+Express/EJS UI and MVC boundaries stay intact. Implement in this session and
+independently review the final change. The user subsequently authorized a test
+branch push and native Windows CI; push to main only after completion and passing
+checks. Cross compilation alone does not satisfy that completion gate.
+
+## Evidence and decisions
+
+- MongoDB 7 officially supports Windows 11 / Server 2019 / Server 2022 x64.
+- BullMQ requires Redis >= 6.2. Package the community Windows Redis 7.2.8 port;
+  document its upstream local-use limitation and include third-party notices.
+- Package Node 22.23.3, MongoDB 7.0.45, CloakBrowser's Windows build
+  146.0.7680.177.5, WinSW 2.12.0 and Microsoft's VC++ runtime. Downloads occur at
+  build time, are SHA-256 pinned, and are never delegated to winget/Chocolatey.
+- NSIS can compile the actual Windows executable on Linux/macOS. The installer
+  itself works offline. A Windows smoke workflow is separate from cross compilation.
+- Application files live in Program Files; persistent state lives in ProgramData.
+  Dedicated service names and ports must not adopt or reconfigure other databases.
+- Preserve state during upgrades and uninstall. Reject an occupied port, an
+  unrelated service, an unsupported OS/CPU or a failed dependency/readiness check.
+
+## Task 1: Reproducible payload and installer build
+
+Create `packaging/windows/` for build-only code. Add a pinned dependency manifest,
+allowlisted application staging, SHA-256 download validation/retries, payload
+integrity manifest, third-party notices and an NSIS compiler image. Package
+Windows binaries, production npm dependencies and no local .env/accounts/logs.
+
+Tests first: file allowlist excludes secrets and rejects symlinks, a corrupted
+download is rejected, unsafe output paths are rejected, PE headers have the
+expected machine type, and a manifest covers every staged file.
+
+Verify: `node --test test/windowsPayload.test.js`; build the real executable;
+inspect/extract it and compare staged file hashes.
+
+## Task 2: Installer lifecycle
+
+Use focused PowerShell helpers for preflight, configuration and WinSW service
+lifecycle. Include web, task worker and MR worker, private Mongo/Redis services,
+safe data-directory junctions, loopback bindings, persistent Redis configuration,
+service ownership checks and readiness checks. Stop owned services before update;
+on failure restore the previous version and its service configuration. The NSIS
+wizard installs shortcuts/uninstall metadata only after health succeeds.
+
+Tests first: XML escaping/argument quoting and Cygwin paths with spaces/Turkish
+characters; service ownership refuses foreign paths; existing configuration is
+preserved; invalid roots/ports fail; uninstall removes no persistent files.
+
+Verify PowerShell parser and helper tests; run Windows lifecycle smoke tests
+(install, health, restart, upgrade, uninstall, reinstall, occupied port).
+
+## Task 3: Documentation, review and delivery
+
+Update README, package scripts, .gitignore and AGENTS with the packaging boundary.
+Document supported Windows versions, data/log locations, default local login,
+Redis port provenance and the difference between built and Windows-tested.
+
+Run all existing Node tests, JS syntax checks, `npm run browser:info`, package
+integrity checks and an independent reviewer. Deliver the executable and checksum.
+If native Windows execution is unavailable, report that limit explicitly and
+do not describe cross compilation as a successful Windows installation.
+
+## Review focus
+
+1. Spaces/non-ASCII paths, XML and process quoting.
+2. Service ownership and rollback without deleting existing data.
+3. Redis persistence and the community port's path conventions.
+4. No network, npm, winget or Chocolatey required on the target machine.
+5. No .env, accounts, browser profiles, cookies or source debug captures in payload.

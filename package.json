@@ -7,6 +7,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "test": "node --test test/*.test.js",
+    "installer:windows": "node packaging/windows/build-installer.js",
     "dev": "node server.js",
     "start": "node server.js",
     "worker": "node worker.js",

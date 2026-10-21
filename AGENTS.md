@@ -34,6 +34,12 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - `routes/`: Express route tanımları. Sadece endpoint ile controller method eşleştirir.
 - `app/Automation/`: Browser otomasyon adapter ve akışları. Database, queue veya HTTP response bilmemelidir.
 - `app/Utils/`: Framework bağımsız küçük yardımcı fonksiyonlar.
+- `packaging/windows/`: Windows EXE build, özel runtime kurulumu, servis yaşam
+  döngüsü ve kaldırma sınırı. HTTP/domain/browser iş akışları burada yeniden
+  yazılmaz; paketlenmiş entry point'ler çağrılır. Kalıcı veriler ProgramData'da
+  tutulur, güncelleme ve kaldırmada silinmez. Yerel hesap/cookie/profil dosyaları
+  build payload'ına alınmaz. Windows servisleri görünür/manual browser oturumu
+  sağlamaz; EXE build başarısı Windows kurulum testi olarak raporlanmaz.
 
 ## Mevcut Akış
 
@@ -67,6 +73,11 @@ Hitmaker, Node.js tabanlı browser task runner'dır.
 - Hedef siteye gidildikten sonra browser hemen kapanmamalıdır. `app/Automation/googleClick.js` içinde kısa bekleme, doğal aşağı/yukarı scroll ve final bekleme yapılmalı; bu aksiyonlar loglanmalıdır.
 - Google araması başlamadan önce hedef siteye preflight navigation yapılmamalı. Cookie gerekiyorsa `app/Automation/browserCookies.js` ile Playwright context'e domain bazlı eklenmelidir.
 - Cookie dönüşümü sadece `app/Automation/browserCookies.js` içinde kalmalı.
+- Cookie dosyası/ZIP HTTP payload kontrolü `app/Validators/cookieFileValidator.js`,
+  bounded ZIP okuma `app/Utils/cookieArchive.js`, cookie set import orchestration'ı
+  `app/Services/cookieFileImportService.js` sınırında kalır. Create/edit/havuz
+  `POST /api/cookies/parse` yolunu ortak kullanır; arşiv diske açılmaz ve cookie
+  değerleri loglanmaz.
 - Queue publish sadece `app/Services/taskJobService.js` sınırında kalmalı.
 - Worker orchestration sadece `app/Services/taskProcessorService.js` içinde kalmalı.
 - Yeni route eklenirse kaynak bazlı route dosyası aç veya mevcut kaynak route'una ekle; `routes/index.js` sadece router mount etsin.

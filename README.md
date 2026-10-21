@@ -70,6 +70,9 @@ Bu kurallar `AGENTS.md`, `CODEX.md` ve `CLAUDE.md` içinde de proje kuralı olar
 - `Düzenle`, task parametrelerini aynı task ID'si üzerinde değiştirir, mevcut run listesini sıfırlar, bekleyen job'ları temizler ve task'ı yeni parametrelerle yeniden kuyruğa alır.
 - `Sil`, task'ı MongoDB'den hard delete eder, bekleyen job'ları kaldırır ve UI'dan anında düşürür.
 - Loglar `log.created` SSE event'i ile anlık prepend edilir. Error log gelirse `Hatalar` sekmesi de anlık güncellenir.
+- Task oluşturma/düzenleme ve cookie havuzundaki dosya yükleme TXT, JSON,
+  COOKIES ve ZIP kabul eder. ZIP klasörlerindeki dosyalar ayrı cookie setleri
+  olarak korunur; bozuk/boş arşiv ve boyut sınırları açık hata üretir.
 - Manuel refresh/polling ana akış değildir.
 
 ## Google Auth ve Cookie Üretimi
@@ -295,6 +298,57 @@ Script davranışı:
 Görünür desktop modunda CloakBrowser Chromium `--start-maximized` ile açılır ve viewport gerçek pencere boyutuna bırakılır. Mobil ekran seçilirse pencere `390x844` açılır ve context mobil viewport/touch ayarlarıyla başlar.
 
 Task formundaki `Aynı anda tarayıcı` alanı task bazlı concurrency belirler. UI `/api/system/browser-capacity` üzerinden CPU/RAM'e göre öneri gösterir, fakat gerçek üst sınır her zaman `MAX_PARALLEL_BROWSERS` değeridir. Sunucuda 4 tarayıcı istiyorsan env içinde `MAX_PARALLEL_BROWSERS=4` veya daha yüksek bir değer set edilmelidir.
+
+## Windows Setup.exe
+
+Windows son kullanıcısına proje klasörü yerine `Hitmaker-1.0.0-Setup-x64.exe`
+verilir. Dosyayı açıp kurulum sihirbazını tamamlaması yeterlidir. Kurulum yönetici
+izni ister; hedef bilgisayarda Docker, Node.js, npm, winget veya Chocolatey gerekmez.
+Gerekli Windows binary'leri pakete dahil edilir; kurulum internet gerektirmez.
+
+- Desteklenen sistemler: **Windows 11 x64, Windows Server 2019/2022 x64**.
+  ARM64, 32 bit Windows ve Windows 10 bu paketin destek kapsamına dahil değildir.
+- Kurulum yeri 64 bit `Program Files` altında olmalıdır. Varsayılan:
+  `C:\Program Files\Hitmaker`.
+- Panel: `http://127.0.0.1:3100`; masaüstünde ve Başlat menüsünde **Hitmaker** kısayolu.
+- Varsayılan giriş: `hitmaker` / `hitmaker34716`.
+- MongoDB, Redis, web, task worker ve MR worker için beş ayrı `HitmakerApp*` servisi
+  kurulur. Diğer projelerin MongoDB/Redis servisleri değiştirilmez.
+- Kalıcı veriler, browser profilleri ve ayarlar: `C:\ProgramData\Hitmaker`.
+  Servis ve kurulum günlükleri bu dizinin `logs` klasöründedir.
+- Güncelleme için yeni EXE aynı program dizinine kurulur. Başarısız güncellemede
+  önceki sürüm geri yüklenir. Windows **Yüklü uygulamalar > Hitmaker > Kaldır**
+  servisleri/programı kaldırır; kalıcı verileri silmez.
+- 3100, 27031 veya 6388 portu başka bir programdaysa kurulum açık hata verir.
+
+Servis modunda browser'lar **headless** çalışmalıdır. Görünür tarayıcıda insan
+müdahalesi gerektiren Google Auth / MR Turnstile akışları Windows servis oturumunda
+kullanılamaz; bunlar için kullanıcı oturumundaki terminal akışını kullanın.
+MR worker'ın varlığı bu manuel akışın servis modunda desteklendiği anlamına gelmez.
+
+Windows Redis bileşeni, `redis-windows` projesinin Cygwin tabanlı 7.2.8 build'idir;
+upstream bu portu lokal kullanım için önerir. Dağıtım kaynakları, lisans notları
+ve SHA-256 değerleri `packaging/windows/` içinde tutulur.
+
+EXE'yi üretmek için geliştirici makinesinde Docker ile:
+
+```bash
+npm run installer:windows
+```
+
+Çıktı `dist/windows/` altında EXE, `.sha256` dosyası ve payload bütünlük
+manifestidir. Build, Windows binary mimarilerini ve derlenen EXE'den geri açılan
+her dosyanın hash'ini doğrular. Yerel `.env`, cookie/profil dosyaları ve loglar
+pakete alınmaz. İndirme sürümleri/hash'leri `dependencies.json` içinde sabittir.
+Paket imzalama sertifikası eklenmediği sürece EXE dijital olarak imzasızdır.
+
+`.github/workflows/windows-installer.yml` gerçek Windows Server 2022 üzerinde
+temiz kurulum, dolu port, servis restart, güncelleme, kaldırma ve yeniden kurulum
+senaryolarını çalıştırır. Linux'ta derleme/PowerShell parser testi, gerçek Windows
+kurulum testinin yerine geçmez; sonuçlar ayrı raporlanmalıdır.
+
+`HOST` web sunucusunun bind adresidir. Normal geliştirme/Docker varsayılanı
+`0.0.0.0`; EXE kurulumu bunu `127.0.0.1` olarak ayarlar.
 
 ## Windows Server 2022 Local Run
 

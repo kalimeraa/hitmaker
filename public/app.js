@@ -265,12 +265,27 @@ async function readCookieInput(scope) {
   const files = Array.from($group.find("[data-cookie-file]")[0].files || []);
   if (!files.length) return { cookies: "", cookieSets: [], useCookiePool: false };
 
-  const cookieSets = await Promise.all(files.map(async (file) => ({
-    name: file.name,
-    content: cleanOptionalText(await readTextFile(file))
-  })));
+  const targetAddress = $(scope === "edit" ? "#editTargetAddress" : "#targetAddress").val();
+  const cookieSets = await parseCookieUploadFiles(files, targetAddress);
 
   return { cookies: "", cookieSets, useCookiePool: false };
+}
+
+async function parseCookieUploadFiles(files, targetAddress) {
+  if (files.length > 50 || files.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024) {
+    throw new Error("En fazla 50 dosya ve toplam 10 MB cookie yükleyebilirsiniz.");
+  }
+  const uploadedFiles = await Promise.all(files.map(async (file) => ({
+    name: file.name,
+    base64: await readFileAsBase64(file)
+  })));
+  const result = await $.ajax({
+    method: "POST",
+    url: "/api/cookies/parse",
+    contentType: "application/json",
+    data: JSON.stringify({ targetAddress: cleanOptionalText(targetAddress) || "google.com", files: uploadedFiles })
+  });
+  return result.cookieSets;
 }
 
 function resetCookieFile(scope) {
@@ -653,10 +668,7 @@ async function importCookiePoolFiles() {
   const files = Array.from($("#cookiePoolFiles")[0].files || []);
   if (!files.length) throw new Error("En az bir cookie dosyası seç");
 
-  const cookieSets = await Promise.all(files.map(async (file) => ({
-    name: file.name,
-    content: cleanOptionalText(await readTextFile(file))
-  })));
+  const cookieSets = await parseCookieUploadFiles(files, $("#cookiePoolTargetAddress").val());
 
   await $.ajax({
     method: "POST",

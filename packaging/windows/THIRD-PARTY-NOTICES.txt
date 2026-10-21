@@ -1,0 +1,55 @@
+Hitmaker Windows distribution
+
+The installer includes private runtimes. Their versions, immutable download
+locations and SHA-256 hashes are recorded in dependencies.json. Application npm
+dependencies retain their license files in app/node_modules.
+
+Node.js: MIT and bundled third-party licenses; runtime/node/LICENSE.
+https://nodejs.org/
+
+MongoDB Community Server: Server Side Public License and bundled third-party
+licenses. See runtime/mongodb/LICENSE-Community.txt, MPL-2 and THIRD-PARTY-NOTICES.
+Source: https://github.com/mongodb/mongo/tree/r7.0.45
+
+CloakBrowser wrapper: MIT. Browser binary: Chromium and bundled third-party
+licenses shipped inside runtime/browser. See the upstream binary distribution.
+https://github.com/CloakHQ/CloakBrowser
+
+Redis for Windows: community Cygwin build of Redis 7.2.8, not an official Redis
+Windows release. Upstream recommends local use; this package is for local Windows
+operation. Production Redis deployments should use the upstream Linux guidance.
+Build/source: https://github.com/redis-windows/redis-windows/tree/7.2.8
+Redis source and license: https://github.com/redis/redis/tree/7.2.8
+Cygwin runtime and source: https://cygwin.com/
+OpenSSL source and licenses: https://openssl-library.org/source/
+The build port's repository license does not replace individual runtime licenses.
+
+WinSW 2.12.0: MIT License
+Copyright (c) 2008-2020 Kohsuke Kawaguchi, Sun Microsystems, Inc., CloudBees, Inc.,
+Oleg Nenashev and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+https://github.com/winsw/winsw/tree/v2.12.0
+
+Microsoft Visual C++ Redistributable: Microsoft's distribution license and EULA
+apply. The unmodified Microsoft-signed installer is included and invoked offline.
+https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist
+
+NSIS: compiler/runtime distributed under the licenses described at
+https://nsis.sourceforge.io/License
