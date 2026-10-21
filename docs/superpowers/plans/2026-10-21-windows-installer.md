@@ -98,3 +98,6 @@ do not describe cross compilation as a successful Windows installation.
 - Independent incremental review identified that transcript/log-copy failures in
   finally could mask a successful installation. Make diagnostic cleanup best-effort
   and mutex release/disposal unconditional.
+- Panel assets previously came from Bootstrap/jQuery CDNs. Bundle the same pinned
+  distributions with licenses/provenance, and block external browser requests in
+  the native local-panel smoke test. Assert both libraries and app.js load.

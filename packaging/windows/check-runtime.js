@@ -53,6 +53,10 @@ async function main() {
     const { launchContext } = await import(pathToFileURL(path.join(appRoot, "node_modules/cloakbrowser/dist/index.js")).href);
     const context = await launchContext({ headless: true, humanize: false, viewport: { width: 800, height: 600 } });
     try {
+      await context.route("**/*", (route) => {
+        const url = new URL(route.request().url());
+        return url.hostname === "127.0.0.1" ? route.continue() : route.abort();
+      });
       const page = await context.newPage();
       const base = `http://127.0.0.1:${config.port}`;
       const response = await page.goto(`${base}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -65,6 +69,10 @@ async function main() {
       ]);
       assert.match(await page.title(), /Hitmaker/i);
       assert.equal(await page.locator("#taskForm").count(), 1, "Authenticated task form missing");
+      assert.equal(await page.locator("#taskForm").evaluate((element) => getComputedStyle(element).display), "flex", "Bundled Bootstrap CSS missing");
+      assert.equal(await page.evaluate(() => typeof window.jQuery), "function", "Bundled jQuery missing");
+      assert.equal(await page.evaluate(() => typeof window.bootstrap?.Modal), "function", "Bundled Bootstrap missing");
+      assert.equal(await page.evaluate(() => typeof window.readCookieInput), "function", "Panel application script missing");
     } finally { await context.close(); }
     console.log("PASS packaged Windows CloakBrowser: local panel navigation and form login (offline)");
   }

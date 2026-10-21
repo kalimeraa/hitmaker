@@ -305,6 +305,8 @@ Windows son kullanıcısına proje klasörü yerine `Hitmaker-1.0.0-Setup-x64.ex
 verilir. Dosyayı açıp kurulum sihirbazını tamamlaması yeterlidir. Kurulum yönetici
 izni ister; hedef bilgisayarda Docker, Node.js, npm, winget veya Chocolatey gerekmez.
 Gerekli Windows binary'leri pakete dahil edilir; kurulum internet gerektirmez.
+Panelin Bootstrap/jQuery dosyaları da yereldir; giriş ve task kontrolleri CDN
+erişimine bağlı değildir. Google araması gibi dış site işlemleri internet ister.
 
 - Desteklenen sistemler: **Windows 11 x64, Windows Server 2019/2022 x64**.
   ARM64, 32 bit Windows ve Windows 10 bu paketin destek kapsamına dahil değildir.

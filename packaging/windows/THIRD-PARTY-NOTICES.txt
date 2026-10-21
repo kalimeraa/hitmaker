@@ -4,6 +4,9 @@ The installer includes private runtimes. Their versions, immutable download
 locations and SHA-256 hashes are recorded in dependencies.json. Application npm
 dependencies retain their license files in app/node_modules.
 
+Bootstrap 5.3.3 and jQuery 3.7.1: MIT. Unmodified browser assets and their license
+files are bundled in app/public/vendor. Provenance and hashes: its README.md.
+
 Node.js: MIT and bundled third-party licenses; runtime/node/LICENSE.
 https://nodejs.org/
 
