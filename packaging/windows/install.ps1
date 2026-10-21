@@ -240,9 +240,20 @@ try {
     } catch { Write-Output "Rollback needs attention: $($_.Exception.Message). Data was preserved in $DataRoot" }
   }
 } finally {
-  if ($Transcript) { Stop-Transcript | Out-Null }
-  if ($CanSaveLog) { Copy-Item -LiteralPath $BootLog -Destination (Join-Path $LogRoot 'setup.log') -Force }
-  if ($Locked) { $Mutex.ReleaseMutex() }
-  if ($null -ne $Mutex) { $Mutex.Dispose() }
+  try {
+    if ($Transcript) {
+      try { Stop-Transcript | Out-Null }
+      catch { Write-Output "Could not close setup transcript: $($_.Exception.Message)" }
+    }
+    if ($CanSaveLog) {
+      try { Copy-Item -LiteralPath $BootLog -Destination (Join-Path $LogRoot 'setup.log') -Force }
+      catch { Write-Output "Could not copy setup log; startup log remains at $BootLog" }
+    }
+  } finally {
+    if ($null -ne $Mutex) {
+      try { if ($Locked) { $Mutex.ReleaseMutex() } }
+      finally { $Mutex.Dispose() }
+    }
+  }
 }
 exit $ExitCode

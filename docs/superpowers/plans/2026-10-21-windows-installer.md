@@ -91,3 +91,10 @@ do not describe cross compilation as a successful Windows installation.
   but fails runtime readiness. Capture native stdout/stderr explicitly (transcript
   alone misses it), and stage all CI diagnostic files on the same drive before
   upload-artifact, which cannot use a common root across C: and D:.
+- Readiness diagnostics confirm MongoDB, Redis, panel authentication, API and both
+  workers pass. Windows browser launches, but synthetic setContent waits forever
+  for load. Replace that artificial document with actual local panel navigation
+  and form login using domcontentloaded, the application's navigation contract.
+- Independent incremental review identified that transcript/log-copy failures in
+  finally could mask a successful installation. Make diagnostic cleanup best-effort
+  and mutex release/disposal unconditional.

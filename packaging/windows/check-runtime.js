@@ -54,10 +54,19 @@ async function main() {
     const context = await launchContext({ headless: true, humanize: false, viewport: { width: 800, height: 600 } });
     try {
       const page = await context.newPage();
-      await page.setContent("<title>Hitmaker setup smoke</title>", { timeout: 30000 });
-      assert.equal(await page.title(), "Hitmaker setup smoke");
+      const base = `http://127.0.0.1:${config.port}`;
+      const response = await page.goto(`${base}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      assert.equal(response.status(), 200, "Browser cannot open the local panel");
+      await page.locator('input[name="username"]').fill(config.auth.username);
+      await page.locator('input[name="password"]').fill(config.auth.password);
+      await Promise.all([
+        page.waitForURL(`${base}/`, { waitUntil: "domcontentloaded", timeout: 30000 }),
+        page.locator('form.login-form button[type="submit"]').click()
+      ]);
+      assert.match(await page.title(), /Hitmaker/i);
+      assert.equal(await page.locator("#taskForm").count(), 1, "Authenticated task form missing");
     } finally { await context.close(); }
-    console.log("PASS packaged Windows CloakBrowser (offline)");
+    console.log("PASS packaged Windows CloakBrowser: local panel navigation and form login (offline)");
   }
 }
 
