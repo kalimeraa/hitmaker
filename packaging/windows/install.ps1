@@ -5,7 +5,6 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot 'Installer.psm1') -Force
 $DataRoot = Join-Path $env:ProgramData 'Hitmaker'
 $LogRoot = Join-Path $DataRoot 'logs'
 $Current = Join-Path $InstallRoot 'current'
@@ -18,6 +17,8 @@ $Swapped = $false
 $Mutex = $null
 $Locked = $false
 $Transcript = $false
+$CanSaveLog = $false
+$BootLog = Join-Path $env:TEMP 'Hitmaker-setup.log'
 $PreviousRunning = @()
 $ExitCode = 0
 
@@ -127,6 +128,10 @@ function Install-Services {
 }
 
 try {
+  Start-Transcript -Path $BootLog -Append | Out-Null
+  $Transcript = $true
+  Write-Output "Preflight: 64-bit process=$([Environment]::Is64BitProcess); ProgramFiles=$([Environment]::GetFolderPath('ProgramFiles')); destination=$InstallRoot"
+  Import-Module (Join-Path $PSScriptRoot 'Installer.psm1') -Force
   Assert-Platform
   Assert-InstallDirectories $InstallRoot $DataRoot
   Assert-ProgramFilesLocation $InstallRoot ([Environment]::GetFolderPath('ProgramFiles'))
@@ -165,8 +170,7 @@ try {
     Assert-FreePorts
     Protect-ApplicationDirectory
     Initialize-Data
-    Start-Transcript -Path (Join-Path $LogRoot 'setup.log') -Append | Out-Null
-    $Transcript = $true
+    $CanSaveLog = $true
     Write-Output 'Preparing private offline runtimes...'
     $runtimeInstaller = Join-Path $PayloadRoot 'runtime\vcredist\vc_redist.x64.exe'
     $vc = Start-Process -FilePath $runtimeInstaller -ArgumentList @('/install', '/quiet', '/norestart') -Wait -PassThru
@@ -205,6 +209,8 @@ try {
 } catch {
   $ExitCode = 1
   Write-Output "SETUP FAILED: $($_.Exception.Message)"
+  Write-Output $_.InvocationInfo.PositionMessage
+  Write-Output $_.ScriptStackTrace
   if ($Action -eq 'Install') {
     try {
       if ($Swapped) {
@@ -224,6 +230,7 @@ try {
   }
 } finally {
   if ($Transcript) { Stop-Transcript | Out-Null }
+  if ($CanSaveLog) { Copy-Item -LiteralPath $BootLog -Destination (Join-Path $LogRoot 'setup.log') -Force }
   if ($Locked) { $Mutex.ReleaseMutex() }
   if ($null -ne $Mutex) { $Mutex.Dispose() }
 }

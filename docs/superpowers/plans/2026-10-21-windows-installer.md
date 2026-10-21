@@ -70,3 +70,14 @@ do not describe cross compilation as a successful Windows installation.
 3. Redis persistence and the community port's path conventions.
 4. No network, npm, winget or Chocolatey required on the target machine.
 5. No .env, accounts, browser profiles, cookies or source debug captures in payload.
+
+## Validation rulings
+
+- Native CI exposed an early installer failure before persistent logging starts;
+  capture a temporary startup transcript, OS architecture and destination, and
+  include it in CI diagnostics. Do not count arbitrary installer failures as a
+  passing occupied-port test.
+- Compression benchmark against the same payload: per-file zlib builds in 52 s
+  and produces a 286.5 MiB installer; solid LZMA produces about 202 MiB but takes
+  several minutes. Use zlib for faster build/install/recovery cycles. Payload
+  SHA-256 verification remains mandatory for every file.

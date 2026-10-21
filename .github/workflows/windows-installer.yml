@@ -51,11 +51,22 @@ jobs:
         run: |
           $setup = Get-ChildItem dist/windows/*Setup-x64.exe | Select-Object -First 1
           ./packaging/windows/smoke-test.ps1 -Installer $setup.FullName
+      - name: Collect early installer diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $bootLog = Join-Path $env:TEMP 'Hitmaker-setup.log'
+          if (Test-Path $bootLog) {
+            Get-Content $bootLog
+            Copy-Item $bootLog (Join-Path $env:RUNNER_TEMP 'Hitmaker-setup.log') -Force
+          }
       - name: Collect installer and service logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-smoke-logs
-          path: C:/ProgramData/Hitmaker/logs/
+          path: |
+            C:/ProgramData/Hitmaker/logs/
+            ${{ runner.temp }}/Hitmaker-setup.log
           if-no-files-found: ignore
           retention-days: 3

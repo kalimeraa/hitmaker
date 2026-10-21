@@ -13,6 +13,10 @@ function Invoke-Setup([bool]$ExpectFailure = $false) {
   if (-not $process.WaitForExit(360000)) { $process.Kill(); throw 'Installer timeout' }
   if ($ExpectFailure) {
     if ($process.ExitCode -eq 0) { throw 'Installer unexpectedly accepted an occupied port' }
+    $bootLog = Join-Path $env:TEMP 'Hitmaker-setup.log'
+    if (-not (Test-Path $bootLog) -or (Get-Content $bootLog -Raw) -notmatch 'Port 3100 is in use') {
+      throw 'Installer failed before reaching the occupied-port check; inspect early diagnostics.'
+    }
   } elseif ($process.ExitCode -notin @(0, 3010)) { throw "Installer failed: $($process.ExitCode)" }
 }
 

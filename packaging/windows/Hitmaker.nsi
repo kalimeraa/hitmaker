@@ -1,8 +1,8 @@
 Unicode true
 ManifestDPIAware true
 RequestExecutionLevel admin
-SetCompressor /SOLID lzma
-SetCompressorDictSize 32
+; Per-file zlib keeps rebuilds and repeated Windows install tests reasonably fast.
+SetCompressor zlib
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "x64.nsh"
